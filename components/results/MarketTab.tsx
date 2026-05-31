@@ -1,6 +1,7 @@
 // components/results/MarketTab.tsx
 'use client'
 import { useState } from 'react'
+import { TermTooltip } from '@/components/ui'
 import type { MarketAnalysis } from '@/lib/gemini'
 
 interface Props {
@@ -75,7 +76,7 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
 
       {/* Market size cards */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Market sizing</h3>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Market sizing</h3>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           {/* Circles + label pills */}
           <div className="flex flex-col md:flex-row items-center gap-6 mb-5">
@@ -99,7 +100,7 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                 tagline="Serviceable Addressable Market (SEA)"
                 value={a.sam_usd}
                 source={topdown || a.sam_methodology || ''}
-                accentBg="bg-green-50"
+                accentBg="bg-success-bg"
                 accentBorder="border-green-300"
                 accentText="text-green-900"
                 dotColor="#15803d"
@@ -128,8 +129,8 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
               </div>
             )}
             {bottomup && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-                <p className="text-xs font-semibold text-green-800 mb-1">Bottom-up methodology</p>
+              <div className="bg-success-bg border border-success-border rounded-xl p-3">
+                <p className="text-xs font-semibold text-success-text mb-1">Bottom-up methodology</p>
                 <p className="text-xs text-green-900 leading-relaxed">{bottomup}</p>
               </div>
             )}
@@ -138,9 +139,9 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
 
         {/* Methodology grade banner */}
         <div className={`mt-3 p-3 rounded-xl border text-sm ${
-          a.methodology_grade === 'bottom-up' ? 'bg-green-50 border-green-200 text-green-800' :
-          a.methodology_grade === 'mixed'     ? 'bg-green-50 border-green-200 text-green-800' :
-          a.methodology_grade === 'missing'   ? 'bg-red-50 border-red-200 text-red-800' :
+          a.methodology_grade === 'bottom-up' ? 'bg-success-bg border-success-border text-success-text' :
+          a.methodology_grade === 'mixed'     ? 'bg-success-bg border-success-border text-success-text' :
+          a.methodology_grade === 'missing'   ? 'bg-danger-bg border-danger-border text-danger-text' :
                                                 'bg-yellow-50 border-yellow-200 text-yellow-800'
         }`}>
           <span className="font-semibold capitalize">
@@ -151,30 +152,30 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
 
         {/* Drop-in market slide — uses the SAME numbers as the cards above (single source of truth) */}
         {showDropIn && (
-          <div className="mt-3 bg-white border-2 border-dashed border-[#1a4d2e]/40 rounded-xl p-4">
+          <div className="mt-3 bg-white border-2 border-dashed border-brand/40 rounded-xl p-4">
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#1a4d2e]/10 text-[#1a4d2e]">AI-generated</span>
-                <p className="text-sm font-semibold text-gray-900">Drop-in market slide content</p>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand/10 text-brand">AI-generated</span>
+                <p className="text-sm font-semibold text-text-primary">Drop-in market slide content</p>
               </div>
               <CopyButton text={slideMarkdown} />
             </div>
-            <p className="text-xs text-gray-500 mb-3">Same numbers as above — clean format for your deck. Click <span className="font-medium">Copy</span> for a markdown version. Validate the sources before using.</p>
-            <div className="bg-gray-50 rounded p-4 space-y-3">
+            <p className="text-xs text-text-tertiary mb-3">Same numbers as above — clean format for your deck. Click <span className="font-medium">Copy</span> for a markdown version. Validate the sources before using.</p>
+            <div className="bg-surface-muted rounded p-4 space-y-3">
               {slideRows.map((row, i) => {
                 if (row.kind === 'heading') {
-                  return <h4 key={i} className="text-base font-bold text-gray-900 mb-1">{row.text}</h4>
+                  return <h4 key={i} className="text-base font-bold text-text-primary mb-1">{row.text}</h4>
                 }
                 return (
                   <div key={i}>
                     <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900">{row.label}:</span>
-                      <span className="text-sm text-gray-700">{row.value}</span>
+                      <span className="text-sm font-semibold text-text-primary">{row.label}:</span>
+                      <span className="text-sm text-text-secondary">{row.value}</span>
                     </div>
                     {row.sub && row.sub.length > 0 && (
                       <ul className="mt-1 space-y-0.5 ml-3">
                         {row.sub.map((s, j) => (
-                          <li key={j} className="text-xs text-gray-600 leading-relaxed">· {s}</li>
+                          <li key={j} className="text-xs text-text-tertiary leading-relaxed">· {s}</li>
                         ))}
                       </ul>
                     )}
@@ -187,27 +188,34 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
       </div>
 
       {/* Growth */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-start gap-8">
-          <div>
-            <p className="text-xs text-gray-400 mb-1">CAGR</p>
-            <p className="text-3xl font-semibold text-[#1a4d2e]">{a.growth_rate_cagr}%</p>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+        {/* Top row: CAGR + Key markets — compact, side by side */}
+        <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-border-muted">
+          <div className="min-w-0">
+            <p className="text-xs text-text-disabled mb-1"><TermTooltip term="CAGR">CAGR</TermTooltip></p>
+            <p className="text-2xl sm:text-3xl font-semibold text-brand truncate">{a.growth_rate_cagr}%</p>
+            <p className="text-[10px] text-text-tertiary mt-0.5">across SEA</p>
           </div>
-          <div className="flex-1">
-            <p className="text-xs text-gray-500 font-medium mb-2">Growth drivers</p>
-            <div className="flex flex-wrap gap-2">
-              {(a.growth_drivers || []).map((d, i) => (
-                <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-md">{d}</span>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 mb-1">Key markets</p>
+          <div className="min-w-0">
+            <p className="text-xs text-text-disabled mb-1.5">Key markets</p>
             <div className="flex gap-1 flex-wrap">
               {(a.key_countries || []).map((c, i) => (
-                <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md font-mono">{c}</span>
+                <span key={i} className="text-[11px] sm:text-xs bg-surface-muted text-text-tertiary px-2 py-1 rounded-md font-mono">{c}</span>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Growth drivers as proper cards — stack on mobile, 2-col on desktop */}
+        <div>
+          <p className="text-xs text-text-tertiary font-medium mb-2.5">Growth drivers</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {(a.growth_drivers || []).map((d, i) => (
+              <div key={i} className="text-xs bg-success-bg/60 text-success-text px-3 py-2 rounded-md leading-relaxed flex gap-2 items-start">
+                <span className="text-success-solid font-semibold shrink-0 mt-0.5">{i + 1}.</span>
+                <span className="min-w-0">{d}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -215,39 +223,41 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
       {/* Sector-weighted multiple calculation */}
       {a.sector_multiples && a.blended_multiple && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Sector-weighted valuation multiple</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">Sector-weighted valuation multiple</h3>
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#1a4d2e] text-white">
-                  <th className="text-left p-3 text-xs font-medium">Sector</th>
-                  <th className="text-center p-3 text-xs font-medium">Weight</th>
-                  <th className="text-center p-3 text-xs font-medium">EV/Rev range (SEA)</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
+                <thead>
+                  <tr className="bg-brand text-white">
+                    <th className="text-left p-3 text-xs font-medium">Sector</th>
+                    <th className="text-center p-3 text-xs font-medium">Weight</th>
+                  <th className="text-center p-3 text-xs font-medium"><TermTooltip term="EV/Revenue">EV/Rev range (SEA)</TermTooltip></th>
                   <th className="text-right p-3 text-xs font-medium">Contribution</th>
                 </tr>
               </thead>
               <tbody>
                 {a.sector_multiples.map((row, i) => (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="p-3 text-xs font-medium text-gray-900">{row.sector}</td>
-                    <td className="p-3 text-xs text-center text-gray-600">{Math.round(row.weight * 100)}%</td>
-                    <td className="p-3 text-xs text-center text-gray-600">{row.ev_revenue_low}x – {row.ev_revenue_high}x</td>
-                    <td className="p-3 text-xs text-right font-semibold text-[#1a4d2e]">{row.contribution.toFixed(2)}x</td>
+                  <tr key={i} className={i % 2 === 0 ? 'bg-surface-muted' : 'bg-white'}>
+                    <td className="p-3 text-xs font-medium text-text-primary">{row.sector}</td>
+                    <td className="p-3 text-xs text-center text-text-tertiary">{Math.round(row.weight * 100)}%</td>
+                    <td className="p-3 text-xs text-center text-text-tertiary">{row.ev_revenue_low}x – {row.ev_revenue_high}x</td>
+                    <td className="p-3 text-xs text-right font-semibold text-brand">{row.contribution.toFixed(2)}x</td>
                   </tr>
                 ))}
-                <tr className="bg-[#1a4d2e]/5 font-semibold">
-                  <td className="p-3 text-sm text-gray-900">Blended multiple</td>
-                  <td className="p-3 text-sm text-center text-gray-600">100%</td>
-                  <td className="p-3 text-sm text-center text-gray-600">
+                <tr className="bg-brand/5 font-semibold">
+                  <td className="p-3 text-sm text-text-primary">Blended multiple</td>
+                  <td className="p-3 text-sm text-center text-text-tertiary">100%</td>
+                  <td className="p-3 text-sm text-center text-text-tertiary">
                     {a.blended_multiple.low.toFixed(1)}x – {a.blended_multiple.high.toFixed(1)}x
                   </td>
-                  <td className="p-3 text-sm text-right text-[#1a4d2e]">{a.blended_multiple.mid.toFixed(1)}x mid</td>
+                  <td className="p-3 text-sm text-right text-brand">{a.blended_multiple.mid.toFixed(1)}x mid</td>
                 </tr>
               </tbody>
             </table>
+            </div>
             {a.revenue_base_usd > 0 && (
-              <div className="p-3 bg-green-50 border-t border-green-200 text-xs text-green-800">
-                Revenue-based range: ${fmtM(a.revenue_base_usd * a.blended_multiple.low)} – ${fmtM(a.revenue_base_usd * a.blended_multiple.high)} pre-money
+              <div className="p-3 bg-success-bg border-t border-success-border text-xs text-success-text">
+                Revenue-based range: ${fmtM(a.revenue_base_usd * a.blended_multiple.low)} – ${fmtM(a.revenue_base_usd * a.blended_multiple.high)} <TermTooltip term="pre-money valuation">pre-money</TermTooltip>
                 &nbsp;·&nbsp; Applied to ${fmtM(a.revenue_base_usd)} annual revenue × {a.blended_multiple.mid.toFixed(1)}x
               </div>
             )}
@@ -257,7 +267,7 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
 
       {/* Football field valuation chart */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Valuation football field</h3>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Valuation football field</h3>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           {(() => {
             const scenarios = (a.valuation_scenarios || []).filter(s => s.premoney_high_usd > 0)
@@ -277,13 +287,13 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                   {scenarios.map((s, i) => (
                     <div key={i} className="flex items-center gap-1.5">
                       <div className="w-3 h-3 rounded-full" style={{ background: SCENARIO_COLORS[i] || '#1a4d2e' }} />
-                      <span className="text-gray-600">{s.label}</span>
+                      <span className="text-text-tertiary">{s.label}</span>
                     </div>
                   ))}
                   {recPre && (
                     <div className="flex items-center gap-1.5 ml-auto">
                       <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
-                      <span className="text-gray-600">Recommended range</span>
+                      <span className="text-text-tertiary">Recommended range</span>
                     </div>
                   )}
                 </div>
@@ -301,14 +311,14 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                     <div key={i} className="mb-4 last:mb-0">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs font-medium text-gray-700 truncate">{scenario.label}</span>
-                          <span className="text-[10px] text-gray-400 flex-shrink-0">· {confTag}</span>
+                          <span className="text-xs font-medium text-text-secondary truncate">{scenario.label}</span>
+                          <span className="text-[10px] text-text-disabled flex-shrink-0">· {confTag}</span>
                         </div>
-                        <span className="text-xs font-semibold text-gray-700 flex-shrink-0 ml-2">
+                        <span className="text-xs font-semibold text-text-secondary flex-shrink-0 ml-2">
                           ${fmtM(scenario.premoney_low_usd)} – ${fmtM(scenario.premoney_high_usd)}
                         </span>
                       </div>
-                      <div className="relative h-6 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="relative h-6 bg-surface-muted rounded-full overflow-hidden">
                         {/* Recommended zone overlay */}
                         {recPre && (
                           <div
@@ -332,7 +342,7 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                           style={{ left: `${midPct}%` }}
                         />
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{scenario.notes}</p>
+                      <p className="text-xs text-text-tertiary mt-1">{scenario.notes}</p>
                     </div>
                   )
                 })}
@@ -347,16 +357,16 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                 </div>
 
                 {scenarios.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">No valuation scenarios were generated for this submission.</p>
+                  <p className="text-sm text-text-disabled text-center py-4">No valuation scenarios were generated for this submission.</p>
                 )}
 
                 {/* Recommended range highlight */}
                 {recPre && (
-                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-xs font-semibold text-green-800 mb-0.5">
-                      Recommended pre-money: ${fmtM(recPre.low)} – ${fmtM(recPre.high)}
+                  <div className="mt-4 p-3 bg-success-bg border border-success-border rounded-lg">
+                    <p className="text-xs font-semibold text-success-text mb-0.5">
+                      Recommended <TermTooltip term="pre-money valuation">pre-money</TermTooltip>: ${fmtM(recPre.low)} – ${fmtM(recPre.high)}
                     </p>
-                    <p className="text-xs text-green-700">{recPre.rationale}</p>
+                    <p className="text-xs text-success-text">{recPre.rationale}</p>
                   </div>
                 )}
               </>
@@ -367,17 +377,18 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
 
       {/* Dilution table */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Dilution impact at ${fmtM(raiseTarget)} raise</h3>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Dilution impact at ${fmtM(raiseTarget)} raise</h3>
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="text-left p-3 text-xs font-medium text-gray-500">Pre-money valuation</th>
-                <th className="text-center p-3 text-xs font-medium text-gray-500">Post-money</th>
-                <th className="text-center p-3 text-xs font-medium text-gray-500">Dilution</th>
-                <th className="text-right p-3 text-xs font-medium text-gray-500">Assessment</th>
-              </tr>
-            </thead>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="bg-surface-muted">
+                  <th className="text-left p-3 text-xs font-medium text-text-tertiary"><TermTooltip term="Pre-money valuation">Pre-money valuation</TermTooltip></th>
+                  <th className="text-center p-3 text-xs font-medium text-text-tertiary"><TermTooltip term="Post-money valuation">Post-money</TermTooltip></th>
+                  <th className="text-center p-3 text-xs font-medium text-text-tertiary"><TermTooltip term="dilution">Dilution</TermTooltip></th>
+                  <th className="text-right p-3 text-xs font-medium text-text-tertiary">Assessment</th>
+                </tr>
+              </thead>
             <tbody>
               {(() => {
                 // Build a dilution table anchored to the recommended pre-money range.
@@ -401,17 +412,17 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
                   const dilPct  = (raiseTarget / postUsd) * 100
                   const isRec   = recPre && preUsd >= recPre.low && preUsd <= recPre.high
                   return (
-                    <tr key={i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} ${isRec ? 'ring-1 ring-inset ring-green-300' : ''}`}>
-                      <td className="p-3 text-xs font-medium text-gray-900">
-                        ${fmtM(preUsd)} {isRec ? <span className="text-green-600">✓</span> : ''}
+                    <tr key={i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-surface-muted'} ${isRec ? 'ring-1 ring-inset ring-green-300' : ''}`}>
+                      <td className="p-3 text-xs font-medium text-text-primary">
+                        ${fmtM(preUsd)} {isRec ? <span className="text-success-text">✓</span> : ''}
                       </td>
-                      <td className="p-3 text-xs text-center text-gray-600">${fmtM(postUsd)}</td>
+                      <td className="p-3 text-xs text-center text-text-tertiary">${fmtM(postUsd)}</td>
                       <td className="p-3 text-xs text-center">
-                        <span className={`font-semibold ${dilPct <= 20 ? 'text-green-700' : dilPct <= 25 ? 'text-yellow-600' : 'text-red-500'}`}>
+                        <span className={`font-semibold ${dilPct <= 20 ? 'text-success-text' : dilPct <= 25 ? 'text-yellow-600' : 'text-danger-text'}`}>
                           {dilPct.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="p-3 text-xs text-right text-gray-400">
+                      <td className="p-3 text-xs text-right text-text-disabled">
                         {dilPct <= 20 ? 'Healthy' : dilPct <= 25 ? 'Acceptable' : dilPct <= 30 ? 'High' : 'Too high'}
                       </td>
                     </tr>
@@ -420,15 +431,16 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
               })()}
             </tbody>
           </table>
+          </div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">Industry standard: 15-25% dilution per round is considered healthy. Above 30% makes future rounds difficult. Rows marked ✓ fall in your recommended pre-money range.</p>
+        <p className="text-xs text-text-disabled mt-2">Industry standard: 15-25% dilution per round is considered healthy. Above 30% makes future rounds difficult. Rows marked ✓ fall in your recommended pre-money range.</p>
       </div>
 
       {/* SEA vs Global vs US */}
       {seaComp && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Market comparison: SEA vs Global vs US</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <h3 className="text-sm font-semibold text-text-primary mb-3">Market comparison: SEA vs Global vs US</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <GeoCard label="SEA (applicable)" data={seaComp.sea} color="green" />
             <GeoCard label="Global benchmark" data={seaComp.global} color="blue" />
             <GeoCard label="US equivalent (reference)" data={seaComp.us_reference} color="gray" dimmed />
@@ -439,22 +451,22 @@ export default function MarketTab({ analysis, raiseTarget, sectorProfile, deckAn
       {/* Investor appetite */}
       {a.investor_appetite && (
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-gray-500 mb-1.5">Investor appetite (SEA, 2025)</p>
-          <p className="text-sm text-gray-700 leading-relaxed">{a.investor_appetite}</p>
+          <p className="text-xs font-semibold text-text-tertiary mb-1.5">Investor appetite (SEA, 2025)</p>
+          <p className="text-sm text-text-secondary leading-relaxed">{a.investor_appetite}</p>
         </div>
       )}
 
       {/* Comparable deals */}
       {(a.comparable_deals || []).length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Comparable deals</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">Comparable deals</h3>
           <div className="space-y-2">
             {a.comparable_deals.map((deal, i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 flex gap-4 items-center">
-                <div className="flex-1 text-sm text-gray-700">{deal.description}</div>
+                <div className="flex-1 text-sm text-text-secondary">{deal.description}</div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-semibold text-[#1a4d2e]">${fmtM(deal.premoney_usd)} pre-money</p>
-                  <p className="text-xs text-gray-400">Raised ${fmtM(deal.raise_usd)} · {deal.year}</p>
+                  <p className="text-sm font-semibold text-brand">${fmtM(deal.premoney_usd)} <TermTooltip term="pre-money valuation">pre-money</TermTooltip></p>
+                  <p className="text-xs text-text-disabled">Raised ${fmtM(deal.raise_usd)} · {deal.year}</p>
                 </div>
               </div>
             ))}
@@ -470,9 +482,9 @@ const SCENARIO_COLORS = ['#1a4d2e', '#1E40AF', '#7C3AED', '#D97706', '#6B7280']
 function MarketCard({ label, value, source, color }: { label: string; value: number | null; source: string; color: string }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-xs text-gray-400 mb-1.5">{label}</p>
+      <p className="text-xs text-text-disabled mb-1.5">{label}</p>
       <p className={`text-2xl font-semibold ${color}`}>${fmtM(value)}</p>
-      <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">{source}</p>
+      <p className="text-xs text-text-disabled mt-1.5 leading-relaxed">{source}</p>
     </div>
   )
 }
@@ -483,8 +495,8 @@ function GeoCard({ label, data, color, dimmed }: {
   color: 'green' | 'blue' | 'gray'
   dimmed?: boolean
 }) {
-  const bgMap = { green: 'bg-green-50 border-green-200', blue: 'bg-blue-50 border-blue-200', gray: 'bg-gray-50 border-gray-200' }
-  const textMap = { green: 'text-green-900', blue: 'text-blue-900', gray: 'text-gray-700' }
+  const bgMap = { green: 'bg-success-bg border-success-border', blue: 'bg-blue-50 border-blue-200', gray: 'bg-surface-muted border-gray-200' }
+  const textMap = { green: 'text-green-900', blue: 'text-blue-900', gray: 'text-text-secondary' }
   return (
     <div className={`rounded-xl border p-4 text-center ${bgMap[color]} ${dimmed ? 'opacity-60' : ''}`}>
       <p className={`text-xs font-medium mb-2 ${textMap[color]}`}>{label}</p>
@@ -510,7 +522,7 @@ function CopyButton({ text }: { text: string }) {
           window.prompt('Copy this text:', text)
         }
       }}
-      className="text-xs font-medium px-2.5 py-1 rounded-md border border-gray-300 text-gray-700 hover:border-[#1a4d2e] hover:text-[#1a4d2e] transition-colors whitespace-nowrap"
+      className="text-xs font-medium px-2.5 py-1 rounded-md border border-gray-300 text-text-secondary hover:border-brand hover:text-brand transition-colors whitespace-nowrap"
       title="Copy markdown version"
     >
       {copied ? '✓ Copied' : '📋 Copy'}
@@ -586,11 +598,13 @@ function RingLabel({ level, tagline, value, source, accentBg, accentBorder, acce
       <div className="flex-shrink-0 w-4 h-4 rounded-full mt-1" style={{ background: dotColor }} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className={`text-xs font-semibold ${accentText}`}>{level}</span>
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide">{tagline}</span>
+          <span className={`text-xs font-semibold ${accentText}`}>
+            <TermTooltip term={level}>{level}</TermTooltip>
+          </span>
+          <span className="text-[10px] text-text-tertiary uppercase tracking-wide">{tagline}</span>
         </div>
         <div className={`text-2xl font-bold ${accentText} leading-tight mt-0.5`}>{fmtMarketSize(value)}</div>
-        {source && <div className="text-[11px] text-gray-600 mt-1 leading-snug">{source}</div>}
+        {source && <div className="text-[11px] text-text-tertiary mt-1 leading-snug">{source}</div>}
       </div>
     </div>
   )
@@ -599,7 +613,7 @@ function RingLabel({ level, tagline, value, source, accentBg, accentBorder, acce
 function EmptyState() {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-      <p className="text-gray-400 text-sm">Market analysis is processing…</p>
+      <p className="text-text-disabled text-sm">Market analysis is processing…</p>
     </div>
   )
 }

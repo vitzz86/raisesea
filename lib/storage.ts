@@ -126,6 +126,34 @@ export async function deleteDeck(storagePath: string | null | undefined): Promis
 }
 
 /**
+ * Download a deck from storage and return as a Buffer. Used by /api/submit
+ * after the client has uploaded the PDF directly via signed URL — the server
+ * fetches it back so Gemini can analyze.
+ *
+ * @param storagePath  e.g. "anonymous/abc123.pdf" or "<userId>/abc123.pdf"
+ * @returns            { buffer, error } — never throws
+ */
+export async function downloadDeck(
+  storagePath: string,
+): Promise<{ buffer: Buffer | null; error: string | null }> {
+  if (!storagePath) return { buffer: null, error: 'No storage path provided' }
+  try {
+    const { data, error } = await admin().storage.from(BUCKET).download(storagePath)
+    if (error || !data) {
+      console.error('[storage] download failed:', error?.message)
+      return { buffer: null, error: error?.message || 'Download returned no data' }
+    }
+    // data is a Blob — convert to Buffer for Gemini base64 encoding
+    const arrayBuffer = await data.arrayBuffer()
+    return { buffer: Buffer.from(arrayBuffer), error: null }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'unknown download error'
+    console.error('[storage] download threw:', msg)
+    return { buffer: null, error: msg }
+  }
+}
+
+/**
  * Check whether a storagePath looks like a Supabase Storage key (vs an
  * old Google Drive URL from pre-migration submissions). Useful while
  * migrating — old submissions still have full https://drive.google.com/...
@@ -134,5 +162,55 @@ export async function deleteDeck(storagePath: string | null | undefined): Promis
 export function isStoragePath(s: string | null | undefined): boolean {
   if (!s) return false
   if (s.startsWith('http://') || s.startsWith('https://')) return false
-  return /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\.pdf$/.test(s)
+  // Storage paths look like "folder/file.pdf". Be forgiving about uppercase extensions,
+  // extra path segments (folder/sub/file.pdf), and the underscore-or-hyphen char set.
+  return /^[a-zA-Z0-9_./-]+\.(pdf|PDF)$/.test(s)
+}
+
+/**
+ * Convert any deck_url into a URL that will actually render inside an iframe.
+ *
+ *  • Storage paths (e.g. "userid/slug.pdf") → signed Supabase URL (private bucket)
+ *  • Google Drive "view" URLs → "/preview" form, which is the only one Drive
+ *    explicitly allows to be embedded in an iframe (the others send
+ *    X-Frame-Options: SAMEORIGIN and produce a blank frame).
+ *  • Already-embeddable URLs (any https://) → returned as-is.
+ *  • Null/empty → null (caller shows the placeholder).
+ *
+ * The second return value, `external`, is a separate URL the user can click
+ * to open the deck in a new tab — useful when the iframe is blocked but the
+ * PDF is reachable directly.
+ */
+export async function resolveDeckUrl(
+  deckUrl: string | null | undefined,
+  expirySeconds = 7200,
+): Promise<{ embedUrl: string | null; external: string | null }> {
+  if (!deckUrl) return { embedUrl: null, external: null }
+
+  // Case 1: Supabase Storage path
+  if (isStoragePath(deckUrl)) {
+    const signed = await signedDeckUrl(deckUrl, expirySeconds)
+    return { embedUrl: signed, external: signed }
+  }
+
+  // Case 2: Google Drive URL — convert to /preview form for embed
+  // Recognises both /file/d/<ID>/... and ?id=<ID> patterns
+  const driveMatch =
+    deckUrl.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+    deckUrl.match(/drive\.google\.com\/.*[?&]id=([a-zA-Z0-9_-]+)/)
+  if (driveMatch) {
+    const id = driveMatch[1]
+    return {
+      embedUrl: `https://drive.google.com/file/d/${id}/preview`,
+      external: `https://drive.google.com/file/d/${id}/view`,
+    }
+  }
+
+  // Case 3: any other https://… URL — try as-is, expose the same URL externally
+  if (deckUrl.startsWith('http://') || deckUrl.startsWith('https://')) {
+    return { embedUrl: deckUrl, external: deckUrl }
+  }
+
+  // Case 4: unrecognised
+  return { embedUrl: null, external: null }
 }

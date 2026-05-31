@@ -200,17 +200,18 @@ export default function MatchLeaderboard({ matches, warmIntros = [], submission 
           ))}
           <span className="text-xs text-gray-400 ml-1">→ Pitch investors scoring 70+</span>
         </div>
-        <div className="grid grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
           {podiumOrder.map((m, i) => {
-            if (!m) return <div key={i} />
+            if (!m) return <div key={i} className="hidden sm:block" />
             const oi = origIdx[i]
             const borderClass = oi===0 ? 'border-2 border-amber-400 shadow-lg shadow-amber-100' : 'border border-gray-200'
             const headerBg    = oi===0 ? 'bg-gradient-to-b from-amber-50 to-amber-100' : oi===1 ? 'bg-gray-50' : 'bg-orange-50'
             const scoreColor  = oi===0 ? 'text-amber-600' : oi===1 ? 'text-gray-500' : 'text-amber-700'
+            // Podium stagger only on desktop — mobile stacks cleanly without offsets
+            const podiumStagger = oi===0 ? '' : oi===1 ? 'sm:mt-3' : 'sm:mt-5'
             return (
               <div key={m.investor_id} onClick={() => setSelected(m)}
-                style={{ marginTop: oi===0?0:oi===1?'12px':'20px' }}
-                className={`${borderClass} rounded-2xl overflow-hidden cursor-pointer hover:-translate-y-1 transition-all duration-200 hover:shadow-md`}>
+                className={`${borderClass} ${podiumStagger} rounded-2xl overflow-hidden cursor-pointer hover:-translate-y-1 transition-all duration-200 hover:shadow-md`}>
                 <div className={`${headerBg} px-3 py-5 text-center`}>
                   <div className="text-2xl mb-1">{medals[oi]}</div>
                   <div className={`font-serif text-3xl font-semibold ${scoreColor}`}>{m.score}</div>
@@ -277,8 +278,8 @@ export default function MatchLeaderboard({ matches, warmIntros = [], submission 
             <p className="text-xs text-gray-400 mt-1">{warmIntros.length} co-investors found in their networks · hover to see details</p>
           </div>
 
-          {/* Cards grid — 2 rows of 3 */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Cards grid — 2 rows of 3 on desktop, stack on mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {visibleNetwork.map((item, i) => (
               <div key={i}
                 onClick={() => item.investor_data && setNetworkSelected(item.investor_data)}
@@ -372,7 +373,7 @@ export default function MatchLeaderboard({ matches, warmIntros = [], submission 
             <div className="p-5 space-y-5">
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Score breakdown</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     {label:'Active',   val:selected.score_breakdown?.active,   max:20, tip:'Is this fund actively deploying capital in 2024-2025? Based on recent deals and confidence signals.'},
                     {label:'Sector',   val:selected.score_breakdown?.sector,   max:22, tip:'How much of their portfolio is in your sector? Based on actual portfolio distribution data.'},

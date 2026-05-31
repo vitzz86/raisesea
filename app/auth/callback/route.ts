@@ -78,6 +78,34 @@ export async function GET(req: NextRequest) {
     console.error('[auth/callback] claim threw:', err)
   }
 
+  // Welcome email on first sign-in (idempotent via user_metadata.welcome_sent).
+  // Non-fatal — if email fails, the user still gets in. Fires async so the
+  // sign-in redirect isn't delayed by Resend's API call.
+  try {
+    const userEmail   = data.user.email
+    const meta        = data.user.user_metadata || {}
+    const welcomeSent = (meta as Record<string, unknown>).welcome_sent === true
+
+    if (userEmail && !welcomeSent) {
+      // Mark sent FIRST (prevents duplicate if user reloads quickly)
+      await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+        user_metadata: { ...meta, welcome_sent: true, welcome_sent_at: new Date().toISOString() },
+      })
+      // Fire and forget — don't block redirect
+      const displayName = (meta as Record<string, unknown>).full_name as string | undefined ||
+                          (meta as Record<string, unknown>).name as string | undefined ||
+                          userEmail.split('@')[0]
+      // Lazy import keeps email module out of the redirect critical path
+      const { sendWelcomeEmail } = await import('@/lib/emails/welcome')
+      sendWelcomeEmail(userEmail, displayName).then(r => {
+        if (!r.ok) console.error('[auth/callback] welcome email failed:', r.error)
+        else       console.log(`[auth/callback] welcome email sent to ${userEmail}`)
+      }).catch(err => console.error('[auth/callback] welcome email threw:', err))
+    }
+  } catch (err) {
+    console.error('[auth/callback] welcome flow threw:', err)
+  }
+
   // Final redirect — to /dashboard by default, or wherever they tried to go
   return NextResponse.redirect(new URL(redirectTo, url.origin))
 }

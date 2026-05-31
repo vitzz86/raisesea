@@ -91,7 +91,7 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
     <div className="space-y-6">
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <StatCard label="Total matches"        value={matches.length} />
         <StatCard label="Top score"            value={matches[0]?.score ?? '—'} accent />
         <StatCard label="Avg score (top 10)"   value={avgScore ?? '—'} />
@@ -101,11 +101,11 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
       {/* Warm intros */}
       {warmIntros?.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            Warm intro network <span className="text-xs text-gray-400 font-normal">— co-investors of your existing backers</span>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">
+            Warm intro network <span className="text-xs text-text-disabled font-normal">— co-investors of your existing backers</span>
           </h3>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <p className="text-xs text-amber-800 mb-3">
+          <div className="bg-warning-bg border border-warning-border rounded-xl p-4">
+            <p className="text-xs text-warning-text mb-3">
               These investors have co-invested with one or more of your current investors. A warm intro through a shared connection converts 3-5× better than cold outreach. <span className="font-medium">Click any chip with full details to see the profile.</span>
             </p>
             <div className="flex flex-wrap gap-2">
@@ -116,11 +116,11 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
                 const clickable = intro.matched_in_db && intro.investor_data
                 const ChipContent = (
                   <>
-                    <span className="font-semibold text-gray-900">{intro.investor}</span>
+                    <span className="font-semibold text-text-primary">{intro.investor}</span>
                     {vias.length > 0 && (
-                      <span className="text-gray-500"> via {vias.join(', ')}</span>
+                      <span className="text-text-tertiary"> via {vias.join(', ')}</span>
                     )}
-                    {clickable && <span className="text-[#1a4d2e] ml-1.5 text-[10px]">↗</span>}
+                    {clickable && <span className="text-brand ml-1.5 text-[10px]">↗</span>}
                     {intro.matched_in_db === false && (
                       <span className="text-gray-300 ml-1 text-[10px]">(not in DB)</span>
                     )}
@@ -141,14 +141,14 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
                         }
                         setSelected(synthetic)
                       }}
-                      className="bg-white border border-amber-300 hover:border-[#1a4d2e] hover:shadow-sm rounded-lg px-3 py-2 text-xs transition-all cursor-pointer"
+                      className="bg-white border border-amber-300 hover:border-brand hover:shadow-sm rounded-lg px-3 py-2 text-xs transition-all cursor-pointer"
                     >
                       {ChipContent}
                     </button>
                   )
                 }
                 return (
-                  <div key={i} className="bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                  <div key={i} className="bg-white border border-warning-border rounded-lg px-3 py-2 text-xs">
                     {ChipContent}
                   </div>
                 )
@@ -160,14 +160,14 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
 
       {/* Leaderboard */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Investor leaderboard</h3>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Investor leaderboard</h3>
         <div className="space-y-2">
           {matches.map((m, i) => (
             <InvestorRow key={i} match={m} rank={i + 1} onClick={() => setSelected(m)} />
           ))}
         </div>
         {matches.length === 0 && (
-          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-gray-400">
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-sm text-text-disabled">
             No investor matches yet. If this persists after a fresh submission, check the terminal for the <code>[match]</code> log line — it shows how many investors made it through each filter stage.
           </div>
         )}
@@ -181,9 +181,9 @@ export default function InvestorsTab({ matchResults, warmIntros, submission }: P
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className={`text-2xl font-semibold ${accent ? 'text-[#1a4d2e]' : 'text-gray-900'}`}>{value}</p>
+    <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 min-w-0 overflow-hidden">
+      <p className="text-xs text-text-disabled mb-1 truncate">{label}</p>
+      <p className={`text-lg sm:text-2xl font-semibold truncate ${accent ? 'text-brand' : 'text-text-primary'}`}>{value}</p>
     </div>
   )
 }
@@ -197,7 +197,7 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-[#1a4d2e]/40 hover:shadow-sm transition-all group"
+      className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-brand/40 hover:shadow-sm transition-all group"
     >
       <div className="flex items-start gap-4">
         {/* Rank + score */}
@@ -205,9 +205,9 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
           {medal ? (
             <div className="text-xl leading-none mb-1">{medal}</div>
           ) : (
-            <div className="text-xs text-gray-400 mb-1">#{rank}</div>
+            <div className="text-xs text-text-disabled mb-1">#{rank}</div>
           )}
-          <div className={`text-2xl font-semibold leading-none ${rank <= 3 ? 'text-[#1a4d2e]' : 'text-gray-700'}`}>
+          <div className={`text-2xl font-semibold leading-none ${rank <= 3 ? 'text-brand' : 'text-text-secondary'}`}>
             {match.score}
           </div>
         </div>
@@ -215,22 +215,22 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm text-gray-900 group-hover:text-[#1a4d2e]">{inv.name}</span>
-            {inv.type && <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{inv.type}</span>}
+            <span className="font-semibold text-sm text-text-primary group-hover:text-brand">{inv.name}</span>
+            {inv.type && <span className="text-xs bg-surface-muted text-text-tertiary px-1.5 py-0.5 rounded">{inv.type}</span>}
             {(inv.hq_city || inv.hq_country) && (
-              <span className="text-xs text-gray-400">{[inv.hq_city, inv.hq_country].filter(Boolean).join(', ')}</span>
+              <span className="text-xs text-text-disabled">{[inv.hq_city, inv.hq_country].filter(Boolean).join(', ')}</span>
             )}
           </div>
-          {match.reason && <p className="text-xs text-gray-500 mt-1">{match.reason}</p>}
+          {match.reason && <p className="text-xs text-text-tertiary mt-1">{match.reason}</p>}
           <div className="flex gap-2 mt-2 flex-wrap items-center">
             {(inv.invest_stages || []).slice(0, 3).map(s => (
-              <span key={s} className="text-xs bg-green-50 text-green-800 px-1.5 py-0.5 rounded">{s}</span>
+              <span key={s} className="text-xs bg-success-bg text-success-text px-1.5 py-0.5 rounded">{s}</span>
             ))}
             {(inv.ticket_min_usd || inv.ticket_max_usd) && (
-              <span className="text-xs text-gray-400">{fmtTicket(inv.ticket_min_usd, inv.ticket_max_usd)}</span>
+              <span className="text-xs text-text-disabled">{fmtTicket(inv.ticket_min_usd, inv.ticket_max_usd)}</span>
             )}
             {inv.investment_strategy && (
-              <span className="text-xs text-gray-500">· {inv.investment_strategy}</span>
+              <span className="text-xs text-text-tertiary">· {inv.investment_strategy}</span>
             )}
           </div>
         </div>
@@ -241,7 +241,7 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
             const v = sb[k] ?? 0
             const m = MAX[k]
             const pct = (v / m) * 100
-            const color = pct >= 70 ? 'text-[#1a4d2e]' : pct >= 40 ? 'text-yellow-700' : 'text-gray-400'
+            const color = pct >= 70 ? 'text-brand' : pct >= 40 ? 'text-yellow-700' : 'text-text-disabled'
             return (
               <div key={k} className="text-center min-w-[44px]">
                 <div className={`text-sm font-semibold ${color}`}>{v}<span className="text-gray-300 font-normal">/{m}</span></div>
@@ -252,7 +252,7 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
         </div>
 
         {/* Expand cue */}
-        <div className="text-xs text-gray-300 group-hover:text-[#1a4d2e] flex-shrink-0 self-center">View →</div>
+        <div className="text-xs text-gray-300 group-hover:text-brand flex-shrink-0 self-center">View →</div>
       </div>
     </button>
   )
@@ -261,10 +261,10 @@ function InvestorRow({ match, rank, onClick }: { match: Match; rank: number; onC
 function InvestorDetailModal({ match, founderContext, onClose }: { match: Match; founderContext: FounderContext; onClose: () => void }) {
   const inv = match.investor
   const sb  = match.score_breakdown || {} as Match['score_breakdown']
-  const confColor = inv.active_confidence === 'High' ? 'bg-green-100 text-green-800' :
+  const confColor = inv.active_confidence === 'High' ? 'bg-green-100 text-success-text' :
                     inv.active_confidence === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
                     inv.active_confidence === 'Low' ? 'bg-orange-100 text-orange-800' :
-                    'bg-gray-100 text-gray-600'
+                    'bg-surface-muted text-text-tertiary'
 
   return (
     <div
@@ -277,18 +277,18 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           <div className="flex items-start justify-between gap-4 mb-3">
             <div className="flex items-center gap-3 min-w-0">
               {match.score > 0 ? (
-                <div className="text-3xl font-semibold text-[#1a4d2e] leading-none flex-shrink-0">{match.score}</div>
+                <div className="text-3xl font-semibold text-brand leading-none flex-shrink-0">{match.score}</div>
               ) : (
-                <div className="text-xs font-semibold uppercase tracking-wider text-amber-700 bg-amber-100 px-2 py-1 rounded leading-tight flex-shrink-0">Warm<br />intro</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-warning-text bg-warning-bg px-2 py-1 rounded leading-tight flex-shrink-0">Warm<br />intro</div>
               )}
               <div className="min-w-0">
-                <div className="font-semibold text-gray-900 truncate">{inv.name}</div>
-                <div className="text-xs text-gray-500">
+                <div className="font-semibold text-text-primary truncate">{inv.name}</div>
+                <div className="text-xs text-text-tertiary">
                   {[inv.type, inv.hq_city].filter(Boolean).join(' · ')}
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="text-gray-300 hover:text-gray-700 text-xl leading-none flex-shrink-0">✕</button>
+            <button onClick={onClose} className="text-gray-300 hover:text-text-secondary text-xl leading-none flex-shrink-0">✕</button>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {inv.active_confidence && (
@@ -297,10 +297,10 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
               </span>
             )}
             {(inv.invest_stages || []).map(s => (
-              <span key={s} className="text-xs bg-green-50 text-green-800 px-2 py-0.5 rounded-full">{s}</span>
+              <span key={s} className="text-xs bg-success-bg text-success-text px-2 py-0.5 rounded-full">{s}</span>
             ))}
             {(inv.invest_countries || []).slice(0, 4).map(c => (
-              <span key={c} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{c}</span>
+              <span key={c} className="text-xs bg-surface-muted text-text-tertiary px-2 py-0.5 rounded-full">{c}</span>
             ))}
           </div>
         </div>
@@ -309,34 +309,34 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Score breakdown — hidden for warm-intro popups (score === 0) since they're not scored matches */}
           {match.score > 0 ? (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Score breakdown</p>
-              <div className="grid grid-cols-3 gap-2">
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Score breakdown</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {(['active','sector','stage','ticket','location'] as const).map(k => {
                   const v = sb[k] ?? 0
                   const m = MAX[k]
                   const pct = (v / m) * 100
                   return (
-                    <div key={k} className="bg-gray-50 rounded-lg p-3">
-                      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{k}</div>
-                      <div className="text-base font-semibold text-gray-800">
+                    <div key={k} className="bg-surface-muted rounded-lg p-3">
+                      <div className="text-[10px] text-text-tertiary uppercase tracking-wide mb-1">{k}</div>
+                      <div className="text-base font-semibold text-text-primary">
                         {v}<span className="text-gray-300 font-normal">/{m}</span>
                       </div>
-                      <div className="h-1 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
-                        <div className="h-1 bg-[#1a4d2e]" style={{ width: `${pct}%` }} />
+                      <div className="h-1 bg-surface-sunken rounded-full mt-1.5 overflow-hidden">
+                        <div className="h-1 bg-brand" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
                 })}
               </div>
               {match.reason && (
-                <div className="mt-3 bg-[#1a4d2e]/5 rounded-lg p-3 text-sm text-[#1a4d2e]">
+                <div className="mt-3 bg-brand/5 rounded-lg p-3 text-sm text-brand">
                   {match.reason}
                 </div>
               )}
             </div>
           ) : (
             // Warm intro context banner
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+            <div className="bg-warning-bg border border-warning-border rounded-lg p-3 text-sm text-warning-text">
               <span className="font-semibold">Warm intro candidate</span> — {match.reason}. They co-invest with your existing backer(s). Not scored against your profile, but a shared-connection intro typically converts 3–5× better than cold outreach.
             </div>
           )}
@@ -347,17 +347,17 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
             if (suggestions.length === 0) return null
             return (
               <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">
                   Tailored approach
                   <span className="text-gray-300 font-normal normal-case ml-1">— how to pitch them</span>
                 </p>
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+                <div className="bg-success-bg border border-success-border rounded-lg p-3 space-y-2">
                   {suggestions.map((s, i) => (
                     <div key={i} className="flex gap-2 text-sm">
-                      <span className="text-green-600 flex-shrink-0 font-bold leading-relaxed">{s.emoji}</span>
+                      <span className="text-success-text flex-shrink-0 font-bold leading-relaxed">{s.emoji}</span>
                       <div className="min-w-0">
                         <span className="font-medium text-green-900">{s.headline}</span>
-                        {s.detail && <span className="text-green-800"> — {s.detail}</span>}
+                        {s.detail && <span className="text-success-text"> — {s.detail}</span>}
                       </div>
                     </div>
                   ))}
@@ -369,8 +369,8 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Investment thesis */}
           {inv.investment_thesis && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Investment thesis</p>
-              <p className="text-sm text-gray-700 leading-relaxed border-l-2 border-[#1a4d2e]/40 pl-3 italic">
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Investment thesis</p>
+              <p className="text-sm text-text-secondary leading-relaxed border-l-2 border-brand/40 pl-3 italic">
                 &ldquo;{inv.investment_thesis}&rdquo;
               </p>
             </div>
@@ -378,7 +378,7 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
 
           {/* Key details grid */}
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Key details</p>
+            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Key details</p>
             <div className="grid grid-cols-2 gap-2">
               <KV label="Ticket size"   val={fmtTicket(inv.ticket_min_usd, inv.ticket_max_usd)} />
               <KV label="Strategy"      val={inv.investment_strategy} />
@@ -396,13 +396,13 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {inv.top_sectors_detail && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Sector composition</p>
+                  <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Sector composition</p>
                   <CompositionPie data={parseComposition(inv.top_sectors_detail)} palette={SECTOR_PALETTE} />
                 </div>
               )}
               {inv.invest_locations_detail && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Geography composition</p>
+                  <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Geography composition</p>
                   <CompositionPie data={parseComposition(inv.invest_locations_detail)} palette={GEO_PALETTE} />
                 </div>
               )}
@@ -412,10 +412,10 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Notable portfolio */}
           {inv.notable_portfolio && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Notable portfolio</p>
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Notable portfolio</p>
               <div className="flex flex-wrap gap-1.5">
                 {inv.notable_portfolio.split(',').map(p => p.trim()).filter(Boolean).map(p => (
-                  <span key={p} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">{p}</span>
+                  <span key={p} className="text-xs bg-surface-muted text-text-secondary px-2 py-1 rounded">{p}</span>
                 ))}
               </div>
             </div>
@@ -424,7 +424,7 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Co-investors */}
           {inv.co_investors && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Frequent co-investors</p>
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Frequent co-investors</p>
               <div className="flex flex-wrap gap-1.5">
                 {inv.co_investors.split(',').map(p => p.trim()).filter(Boolean).slice(0, 12).map(p => (
                   <span key={p} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">{p}</span>
@@ -436,10 +436,10 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Value add */}
           {inv.value_add && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Value add</p>
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Value add</p>
               <div className="flex flex-wrap gap-1.5">
                 {inv.value_add.split(',').map(v => v.trim()).filter(Boolean).map(v => (
-                  <span key={v} className="text-xs bg-green-50 text-green-800 px-2 py-1 rounded">{v}</span>
+                  <span key={v} className="text-xs bg-success-bg text-success-text px-2 py-1 rounded">{v}</span>
                 ))}
               </div>
             </div>
@@ -448,18 +448,18 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
           {/* Lead partner */}
           {inv.leadership_name && (
             <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Lead partner</p>
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">Lead partner</p>
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#1a4d2e]/10 flex items-center justify-center text-[#1a4d2e] font-medium text-sm flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand font-medium text-sm flex-shrink-0">
                   {inv.leadership_name.split(' ').map(n => n[0]).slice(0, 2).join('')}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-gray-900 truncate">{inv.leadership_name}</div>
-                  {inv.leadership_title && <div className="text-xs text-gray-400 truncate">{inv.leadership_title}</div>}
+                  <div className="text-sm font-medium text-text-primary truncate">{inv.leadership_name}</div>
+                  {inv.leadership_title && <div className="text-xs text-text-disabled truncate">{inv.leadership_title}</div>}
                 </div>
                 {inv.leadership_linkedin && (
                   <a href={inv.leadership_linkedin} target="_blank" rel="noopener noreferrer"
-                    className="text-xs text-[#1a4d2e] hover:underline flex-shrink-0">LinkedIn →</a>
+                    className="text-xs text-brand hover:underline flex-shrink-0">LinkedIn →</a>
                 )}
               </div>
             </div>
@@ -470,18 +470,18 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
         <div className="sticky bottom-0 bg-white rounded-b-2xl border-t border-gray-100 p-4 flex gap-2">
           {inv.website && /^https?:\/\//.test(inv.website) && (
             <a href={inv.website} target="_blank" rel="noopener noreferrer"
-              className="flex-1 text-sm font-medium text-center bg-[#1a4d2e] hover:bg-[#143d24] text-white py-2.5 rounded-lg transition-colors">
+              className="flex-1 text-sm font-medium text-center bg-brand hover:bg-brand-hover text-white py-2.5 rounded-lg transition-colors">
               Visit website →
             </a>
           )}
           {inv.linkedin && /^https?:\/\//.test(inv.linkedin) && (
             <a href={inv.linkedin} target="_blank" rel="noopener noreferrer"
-              className="text-sm font-medium px-4 border border-gray-300 hover:border-[#1a4d2e] text-gray-700 hover:text-[#1a4d2e] py-2.5 rounded-lg transition-colors">
+              className="text-sm font-medium px-4 border border-gray-300 hover:border-brand text-text-secondary hover:text-brand py-2.5 rounded-lg transition-colors">
               LinkedIn
             </a>
           )}
           <button onClick={onClose}
-            className="text-sm font-medium px-4 border border-gray-300 text-gray-600 hover:bg-gray-50 py-2.5 rounded-lg transition-colors">
+            className="text-sm font-medium px-4 border border-gray-300 text-text-tertiary hover:bg-surface-muted py-2.5 rounded-lg transition-colors">
             Close
           </button>
         </div>
@@ -492,9 +492,9 @@ function InvestorDetailModal({ match, founderContext, onClose }: { match: Match;
 
 function KV({ label, val }: { label: string; val?: string | null }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{label}</div>
-      <div className="text-sm text-gray-800 truncate">{val || '—'}</div>
+    <div className="bg-surface-muted rounded-lg p-3">
+      <div className="text-[10px] text-text-tertiary uppercase tracking-wide mb-0.5">{label}</div>
+      <div className="text-sm text-text-primary truncate">{val || '—'}</div>
     </div>
   )
 }
@@ -694,7 +694,7 @@ const GEO_PALETTE    = ['#0c4a6e', '#15803d', '#a16207', '#7e22ce', '#b91c1c', '
 
 function CompositionPie({ data, palette }: { data: PieSegment[]; palette: string[] }) {
   if (data.length === 0) {
-    return <p className="text-sm text-gray-400">No composition data</p>
+    return <p className="text-sm text-text-disabled">No composition data</p>
   }
 
   // Donut chart geometry
@@ -746,8 +746,8 @@ function CompositionPie({ data, palette }: { data: PieSegment[]; palette: string
         {slices.map((s, i) => (
           <li key={i} className="flex items-center gap-2 min-w-0">
             <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-            <span className="text-gray-700 truncate flex-1 min-w-0">{s.label}</span>
-            <span className="text-gray-500 font-medium flex-shrink-0">{s.pct}%</span>
+            <span className="text-text-secondary truncate flex-1 min-w-0">{s.label}</span>
+            <span className="text-text-tertiary font-medium flex-shrink-0">{s.pct}%</span>
           </li>
         ))}
       </ul>

@@ -1,10 +1,10 @@
 // app/api/submit/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { randomBytes } from 'crypto'
-import { uploadDeck } from '@/lib/storage'
+import { downloadDeck } from '@/lib/storage'
 import { runFullAnalysis, fuzzyMatchInvestors } from '@/lib/gemini'
 import { runMatching, normalizeCountry } from '@/lib/matching'
+import { getSessionUser } from '@/lib/supabase-server'
 import type { Investor } from '@/lib/supabase'
 
 const supabase = createClient(
@@ -18,70 +18,97 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData()
+    // Auth: middleware ensures user is logged in for /apply, but /api/submit
+    // is callable directly. We treat unauthenticated submissions as legacy
+    // (anonymous) so the route doesn't break, but we strongly prefer the
+    // session user when present and use their email as authoritative.
+    const sessionUser = await getSessionUser()
 
-    // ── 1. Extract form fields ──────────────────────────────
-    const companyName       = formData.get('company_name') as string
-    const country           = formData.get('country') as string
-    const stageRaw          = formData.get('stage') as string
-    const sectorRaw         = formData.get('sector') as string
-    const raiseTargetStr    = formData.get('raise_target_usd') as string
-    const businessModel     = formData.get('business_model') as string
-    const founderName       = formData.get('founder_name') as string
-    const founderEmail      = formData.get('founder_email') as string
-    const founderLinkedin   = formData.get('founder_linkedin') as string
-    const currentInvestors  = formData.get('current_investors') as string
-    const deckFile          = formData.get('deck') as File | null
+    // ── 1. Parse JSON body ──────────────────────────────────
+    // (Previously this was FormData with the PDF file. The PDF is now
+    // uploaded directly to Supabase via signed URL — see /api/upload/signed-url.
+    // We receive just the storage path here and download it back for Gemini.)
+    const body = await req.json().catch(() => null) as Record<string, unknown> | null
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    const companyName       = (body.company_name        as string) || ''
+    const country           = (body.country             as string) || ''
+    const stageRaw          = (body.stage               as string) || ''
+    const sectorRaw         = (body.sector              as string) || ''
+    const raiseTargetStr    = (body.raise_target_usd    as string) || ''
+    const businessModel     = (body.business_model      as string) || ''
+    const founderName       = (body.founder_name        as string) || ''
+    // Authenticated user's email always wins. Body value used only when
+    // there's no session (legacy/anonymous path).
+    const founderEmail      = sessionUser?.email || ((body.founder_email as string) || '')
+    const founderLinkedin   = (body.founder_linkedin    as string) || ''
+    const currentInvestors  = (body.current_investors   as string) || ''
+    const storagePath       = (body.storage_path        as string) || ''
+    const uniqueSlug        = (body.slug                as string) || ''
 
     // Normalize stage + sector to canonical strings so all downstream lookups
     // (matching's STAGE_LEVEL, intelligence-db's VALUATION_BY_SECTOR/MARKET_SIZES) match.
-    // Form sends 'Pre-Series A' (capital S) but DB uses 'Pre-series A' (lowercase).
-    // Form sends 'SaaS / B2B' / 'Crypto / Web3' but DB uses 'SaaS' / 'Crypto/Web3'.
     const stage  = canonicalStage(stageRaw)
     const sector = canonicalSector(sectorRaw)
 
     const raiseTarget = parseInt(raiseTargetStr || '0')
 
-    if (!founderEmail || !companyName || !deckFile) {
+    if (!founderEmail || !companyName || !storagePath || !uniqueSlug) {
       return NextResponse.json(
-        { error: 'Missing required fields: company_name, founder_email, deck' },
+        { error: 'Missing required fields: company_name, founder_email, storage_path, slug' },
         { status: 400 }
       )
     }
 
-    // ── 2. Read deck as base64 ──────────────────────────────
-    const deckBuffer = await deckFile.arrayBuffer()
-    const deckBase64 = Buffer.from(deckBuffer).toString('base64')
-    const mimeType   = deckFile.type || 'application/pdf'
+    // Validate slug + storagePath cross-consistency to prevent path manipulation
+    // (e.g., client passing someone else's slug with own storage path).
+    if (!/^[a-zA-Z0-9_-]+$/.test(uniqueSlug)) {
+      return NextResponse.json({ error: 'Invalid slug format' }, { status: 400 })
+    }
+    if (!storagePath.endsWith(`/${uniqueSlug}.pdf`)) {
+      return NextResponse.json(
+        { error: 'Storage path does not match slug' },
+        { status: 400 }
+      )
+    }
 
-    // Generate the unique slug NOW (used as the deck's storage filename and
-    // later as the public match URL: /match/<slug>).
-    const uniqueSlug = randomBytes(8).toString('hex')
+    // ── 2. Download deck from Storage (uploaded by client via signed URL) ──
+    // This adds a round-trip vs the old in-memory flow, but enables Vercel
+    // deployment (file never passes through the API route's 4.5MB limit).
+    const deckDownloadPromise = downloadDeck(storagePath)
 
-    // ── 3. Upload deck to Supabase Storage (parallel with analysis) ─
-    // No more Drive — files live in the pitch-decks bucket (Singapore region).
-    // Returns { storagePath, error } and never throws; if upload fails we save
-    // the submission with storagePath=null and super admin can retry later.
-    const deckUploadPromise = uploadDeck(
-      Buffer.from(deckBuffer),
-      uniqueSlug,
-      null, // userId — null until auth ships in chunk 3
-      mimeType,
-    )
-
-    // ── 4. Get investor list for matching and conflict check ─
-    const { data: investors, error: invErr } = await supabase
+    // ── 3. Get investor list (in parallel with deck download) ────────────
+    const investorsPromise = supabase
       .from('investors')
       .select('id, name, invest_stages, invest_sectors, invest_countries, ticket_min_usd, ticket_max_usd, investment_thesis, business_model_pref, founder_preference, min_traction_stage, is_active, active_confidence, hq_in_sea, type, hq_country, hq_city, description, value_add, co_investors, notable_portfolio, invest_locations_detail, top_sectors_detail, investment_strategy, follow_on_investment, ownership_preference, investment_instrument, num_investments, leadership_name, leadership_title, leadership_linkedin, website, linkedin')
       .order('active_confidence', { ascending: false })
 
+    const [deckResult, investorsResult] = await Promise.all([
+      deckDownloadPromise,
+      investorsPromise,
+    ])
+
+    if (deckResult.error || !deckResult.buffer) {
+      console.error('[/api/submit] deck download failed:', deckResult.error)
+      return NextResponse.json(
+        { error: `Failed to read uploaded deck: ${deckResult.error}` },
+        { status: 500 }
+      )
+    }
+
+    const { data: investors, error: invErr } = investorsResult
     if (invErr) throw invErr
+
+    const deckBase64 = deckResult.buffer.toString('base64')
+    const mimeType   = 'application/pdf'
 
     // Supabase's .select() with a column list returns a partial shape;
     // cast back to Investor[] since we know which fields we asked for.
     const investorList = (investors || []) as unknown as Investor[]
 
-    // ── 5. Run Gemini analysis (deck extract + 3 parallel analyses) ─
+    // ── 4. Run Gemini analysis (deck extract + 3 parallel analyses) ─
     // Pass canonicalized form stage/sector as overrides — these win over Gemini's
     // interpretation of the deck (founder knows their own stage).
     let fullAnalysis
@@ -171,24 +198,19 @@ export async function POST(req: NextRequest) {
     // (Not just those in top matches — surface the full co-invest network.)
     const warmIntros = buildCoInvestorNetwork(matchedCurrent, investorList, excludedIds)
 
-    // ── 9. Await deck upload ────────────────────────────────
-    // uploadDeck returns { storagePath, error } and never throws.
-    // We store the storage path in deck_url (legacy column name) for now;
-    // the column is reused for both old Drive URLs and new storage paths.
-    // isStoragePath() in lib/storage.ts distinguishes them at read time.
-    const { storagePath: deckUrl, error: deckUploadError } = await deckUploadPromise
-    if (deckUploadError) {
-      console.error('[submit] deck upload failed but continuing:', deckUploadError)
-    }
+    // Note: deck is already in storage (uploaded by client via signed URL before
+    // calling this endpoint). We use `storagePath` directly as the deck_url.
+    const deckUrl = storagePath
 
     // ── 10. Save to Supabase ────────────────────────────────
-    // uniqueSlug was generated in step 3 so the deck filename and the
-    // /match/<slug> URL use the same identifier.
+    // uniqueSlug was provided in the request body (generated by /api/upload/signed-url)
+    // so the deck filename and the /match/<slug> URL use the same identifier.
 
     const { data: submission, error: subErr } = await supabase
       .from('submissions')
       .insert({
         unique_slug:            uniqueSlug,
+        user_id:                sessionUser?.id || null,
         company_name:           extraction?.company_name   || companyName,
         country,
         stage:                  finalStage,

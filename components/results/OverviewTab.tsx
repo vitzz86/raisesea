@@ -23,22 +23,22 @@ export default function OverviewTab({
   const moat     = competitiveAnalysis?.moat_scores as { overall: number } | null
   const top3     = matchResults.slice(0, 3)
 
-  const scoreColor = !score ? 'text-gray-400'
-    : score >= 80 ? 'text-green-700'
+  const scoreColor = !score ? 'text-text-disabled'
+    : score >= 80 ? 'text-success-text'
     : score >= 60 ? 'text-yellow-600'
     : score >= 40 ? 'text-orange-500'
-    : 'text-red-600'
+    : 'text-danger-text'
 
   return (
     <div className="space-y-6">
 
       {/* 4 metric cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <MetricCard
           label="Deck score"
           value={score != null ? `${score}/100` : '—'}
           sub={readiness || 'Pending analysis'}
-          accent={score != null ? scoreColor : 'text-gray-400'}
+          accent={score != null ? scoreColor : 'text-text-disabled'}
           onClick={() => onTabChange('deck')}
         />
         <MetricCard
@@ -65,22 +65,22 @@ export default function OverviewTab({
       {top3.length > 0 && (
         <div>
           <SectionTitle title="Top investor matches" action="See all →" onAction={() => onTabChange('investors')} />
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             {top3.map((m, i) => {
               const inv = m.investor as Record<string, string | number | string[]>
               return (
                 <div key={i} className="bg-white border border-gray-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm text-gray-900">{inv.name}</span>
-                    <span className="text-xs font-semibold text-[#1a4d2e] bg-green-50 px-2 py-0.5 rounded-full">
+                    <span className="font-medium text-sm text-text-primary">{inv.name}</span>
+                    <span className="text-xs font-semibold text-brand bg-success-bg px-2 py-0.5 rounded-full">
                       {m.score as number}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-1">{inv.type} · {inv.hq_city}, {inv.hq_country}</p>
-                  <p className="text-xs text-gray-600 line-clamp-2">{m.reason as string}</p>
+                  <p className="text-xs text-text-tertiary mb-1">{inv.type} · {inv.hq_city}, {inv.hq_country}</p>
+                  <p className="text-xs text-text-tertiary line-clamp-2">{m.reason as string}</p>
                   <div className="flex gap-1 mt-2 flex-wrap">
                     {((inv.invest_stages || []) as string[]).slice(0,2).map((s, j) => (
-                      <span key={j} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{s}</span>
+                      <span key={j} className="text-xs bg-surface-muted text-text-tertiary px-1.5 py-0.5 rounded">{s}</span>
                     ))}
                   </div>
                 </div>
@@ -97,14 +97,14 @@ export default function OverviewTab({
           <div className="space-y-2">
             {topFixes.map((fix, i) => (
               <div key={i} className="bg-white border-l-4 border-red-400 border border-gray-200 rounded-xl p-4 flex gap-4">
-                <div className="w-6 h-6 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-red-500 text-xs font-bold">{i + 1}</span>
+                <div className="w-6 h-6 bg-danger-bg rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-danger-text text-xs font-bold">{i + 1}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{fix.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{fix.description}</p>
+                  <p className="text-sm font-medium text-text-primary">{fix.title}</p>
+                  <p className="text-xs text-text-tertiary mt-0.5 line-clamp-2">{fix.description}</p>
                 </div>
-                <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-md flex-shrink-0 self-start">
+                <span className="text-xs font-medium text-success-text bg-success-bg px-2 py-1 rounded-md flex-shrink-0 self-start">
                   {fix.score_impact}
                 </span>
               </div>
@@ -117,25 +117,25 @@ export default function OverviewTab({
       {marketAnalysis && (
         <div>
           <SectionTitle title="Market snapshot" action="Full analysis →" onAction={() => onTabChange('market')} />
-          <div className="bg-white border border-gray-200 rounded-xl p-5 grid grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-gray-400 mb-1">TAM</p>
-              <p className="text-lg font-semibold text-gray-900">${fmtM(tam)}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{marketAnalysis.tam_source as string}</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="min-w-0 overflow-hidden">
+              <p className="text-xs text-text-disabled mb-1 truncate">TAM</p>
+              <p className="text-base sm:text-lg font-semibold text-text-primary truncate">${fmtM(tam)}</p>
+              <p className="text-xs text-text-disabled mt-0.5 truncate">{marketAnalysis.tam_source as string}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">SAM (SEA)</p>
-              <p className="text-lg font-semibold text-gray-900">${fmtM(marketAnalysis.sam_usd as number)}</p>
+            <div className="min-w-0 overflow-hidden">
+              <p className="text-xs text-text-disabled mb-1 truncate">SAM (SEA)</p>
+              <p className="text-base sm:text-lg font-semibold text-text-primary truncate">${fmtM(marketAnalysis.sam_usd as number)}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">CAGR</p>
-              <p className="text-lg font-semibold text-gray-900">{marketAnalysis.growth_rate_cagr as number}%</p>
+            <div className="min-w-0 overflow-hidden">
+              <p className="text-xs text-text-disabled mb-1 truncate">CAGR</p>
+              <p className="text-base sm:text-lg font-semibold text-text-primary truncate">{marketAnalysis.growth_rate_cagr as number}%</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">Methodology</p>
-              <p className={`text-sm font-semibold capitalize ${
-                marketAnalysis.methodology_grade === 'bottom-up' ? 'text-green-700' :
-                marketAnalysis.methodology_grade === 'missing' ? 'text-red-500' : 'text-yellow-600'
+            <div className="min-w-0 overflow-hidden">
+              <p className="text-xs text-text-disabled mb-1 truncate">Methodology</p>
+              <p className={`text-sm font-semibold capitalize truncate ${
+                marketAnalysis.methodology_grade === 'bottom-up' ? 'text-success-text' :
+                marketAnalysis.methodology_grade === 'missing' ? 'text-danger-text' : 'text-yellow-600'
               }`}>
                 {marketAnalysis.methodology_grade as string}
               </p>
@@ -148,24 +148,24 @@ export default function OverviewTab({
       {competitiveAnalysis && competitiveAnalysis.moat_scores && (
         <div>
           <SectionTitle title="Competitive position" action="Full analysis →" onAction={() => onTabChange('competitors')} />
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex gap-4 mb-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4">
               {Object.entries((competitiveAnalysis.moat_scores as Record<string, number>) || {})
                 .filter(([k]) => !['overall','actions'].includes(k))
                 .map(([key, val]) => (
-                  <div key={key} className="flex-1 text-center">
+                  <div key={key} className="text-center min-w-0">
                     <div className="text-lg font-semibold" style={{ color: moatColor(val as number) }}>{val}</div>
-                    <div className="text-xs text-gray-400 capitalize mt-0.5">{key.replace(/_/g,' ')}</div>
+                    <div className="text-[11px] sm:text-xs text-text-disabled capitalize mt-0.5 leading-tight">{key.replace(/_/g,' ')}</div>
                   </div>
                 ))
               }
             </div>
             {(competitiveAnalysis.key_differentiators as string[] || []).length > 0 && (
               <div>
-                <p className="text-xs text-gray-500 font-medium mb-1.5">Key differentiators</p>
+                <p className="text-xs text-text-tertiary font-medium mb-1.5">Key differentiators</p>
                 <div className="flex flex-wrap gap-1.5">
                   {(competitiveAnalysis.key_differentiators as string[]).map((d, i) => (
-                    <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-md">{d}</span>
+                    <span key={i} className="text-xs bg-success-bg text-success-text px-2 py-1 rounded-md">{d}</span>
                   ))}
                 </div>
               </div>
@@ -183,11 +183,11 @@ function MetricCard({ label, value, sub, accent, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-[#1a4d2e] hover:shadow-sm transition-all group"
+      className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 text-left hover:border-brand hover:shadow-sm transition-all group min-w-0 overflow-hidden"
     >
-      <p className="text-xs text-gray-400 mb-1.5">{label}</p>
-      <p className={`text-2xl font-semibold ${accent || 'text-gray-900'}`}>{value}</p>
-      <p className="text-xs text-gray-400 mt-1">{sub}</p>
+      <p className="text-xs text-text-disabled mb-1.5 truncate">{label}</p>
+      <p className={`text-lg sm:text-2xl font-semibold truncate ${accent || 'text-text-primary'}`}>{value}</p>
+      <p className="text-xs text-text-disabled mt-1 truncate">{sub}</p>
     </button>
   )
 }
@@ -195,9 +195,9 @@ function MetricCard({ label, value, sub, accent, onClick }: {
 function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
     <div className="flex items-center justify-between mb-3">
-      <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+      <h2 className="text-base font-semibold text-text-primary">{title}</h2>
       {action && (
-        <button onClick={onAction} className="text-xs text-[#1a4d2e] hover:underline">{action}</button>
+        <button onClick={onAction} className="text-xs text-brand hover:underline">{action}</button>
       )}
     </div>
   )

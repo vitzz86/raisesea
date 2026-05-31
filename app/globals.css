@@ -1,42 +1,187 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+/* ═══════════════════════════════════════════════════════════════
+   RaiseSEA design system — global styles
+   Loaded by app/layout.tsx
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Inter Variable — primary UI font (Linear / Stripe / Vercel choice).
+   Loaded from Google Fonts. Variable font means we get all weights in one request. */
+@import url('https://rsms.me/inter/inter.css');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─── CSS variables — for raw CSS that can't use Tailwind tokens ─── */
 :root {
-  --brand: #1a4d2e;
-  --brand-mid: #2d7a4e;
-  --brand-light: #E8F5E9;
-  --brand-pale: #f0faf2;
-  --ink: #0d1f14;
-  --ink-mid: #3d5045;
-  --ink-light: #6b7d6e;
-  --border: #d6e4d9;
-  --bg: #fafcfa;
-  --white: #ffffff;
-  --red: #dc2626;
-  --font-display: 'DM Serif Display', Georgia, serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --radius: 14px;
-  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+  /* Brand */
+  --brand:           #1a4d2e;
+  --brand-hover:     #143d24;
+  --brand-soft:      #e8f5e9;
+
+  /* Surfaces (warm-tinted neutrals) */
+  --surface-page:    #f4f7f5;
+  --surface-card:    #ffffff;
+  --surface-muted:   #eef2ef;
+
+  /* Text */
+  --text-primary:    #0d1f14;
+  --text-secondary:  #3d5045;
+  --text-tertiary:   #6b7d6e;
+  --text-disabled:   #a8b3aa;
+
+  /* Borders */
+  --border-default: #d4dfd7;
+  --border-muted:   #e3eae5;
+  --border-strong:  #8a9d8f;
+
+  /* Status */
+  --success: #2d7a4e;
+  --warning: #d97706;
+  --danger:  #c0392b;
+  --info:    #2563a3;
+
+  /* Spacing scale (for raw CSS — Tailwind preferred) */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Radius */
+  --radius-input: 6px;
+  --radius-card:  8px;
+  --radius-modal: 16px;
+}
+
+/* ─── Base resets ───────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 html, body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-body);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';  /* Inter's stylistic alternates: more refined feel */
+  font-variation-settings: 'opsz' 18;             /* optical sizing for body text */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* Prevent any rogue element from causing horizontal scroll on mobile.
+     IMPORTANT: use `clip` not `hidden` — `clip` clips overflow without creating
+     a new scrolling/positioning context, so position:sticky on the desktop
+     sidebar still works correctly. With `hidden`, the sidebar's nearest
+     scrolling ancestor becomes body, which breaks sticky.
+     Browser support: Chrome 90+, Firefox 81+, Safari 16+ (iOS 16+).
+     Fallback to `hidden` for older browsers — they lose sticky sidebar but
+     gain the overflow protection. */
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
-* { box-sizing: border-box; }
+/* Variable font fallback for browsers without Inter Variable */
+@supports not (font-variation-settings: normal) {
+  html, body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--ink-light); }
+/* ─── Scrollbar (subtle, on-brand) ──────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
 
-/* Selection */
-::selection { background: var(--brand-light); color: var(--brand); }
+/* ─── Utility: scrollbar-hide for horizontal-scroll nav (e.g., tab strips on mobile) ─── */
+.scrollbar-hide {
+  -ms-overflow-style: none;     /* IE / Edge legacy */
+  scrollbar-width: none;        /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;                /* Chrome / Safari / Brave */
+}
+
+/* ─── Selection — brand-tinted ──────────────────────────────────── */
+::selection {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* ─── Focus visible — accessibility ─────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Remove default focus on buttons that have custom focus styles */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Link reset ─────────────────────────────────────────────────── */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ─── Headings — reset default browser margins ─────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+p {
+  margin: 0;
+}
+
+/* ─── Input + button reset ──────────────────────────────────────── */
+/* CRITICAL: do NOT add `border: none` here. Tailwind's `border` utility
+   only sets `border-width`, so `border: none` shorthand kills the style
+   (border-style: none) and makes inputs appear borderless until focused.
+   The right place to control borders is per-element via Tailwind classes. */
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* Inputs: only remove the browser default focus outline (we replace it
+   with brand-colored focus rings via Tailwind). Do NOT touch border. */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+}
+
+/* ─── Skeleton loading shimmer ──────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-muted) 0%, var(--border-muted) 50%, var(--surface-muted) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-input);
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}

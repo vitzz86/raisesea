@@ -1,205 +1,510 @@
+// ═══════════════════════════════════════════════════════════════
+// app/page.tsx — Landing page (rebuilt chunk 12.7)
+//
+// Replaces the original landing page (256 lines of inline DM Serif
+// styles) with a clean design-system-based rebuild.
+//
+// Voice: "Sharp Friend" (per VOICE_GUIDE.md)
+// Hero copy: locked with user — Raise Smarter. Close Faster.
+// Aesthetic family: Linear / Mercury / Stripe (subtle motion, real
+// product visualization, ruthless positioning above the fold).
+//
+// Architecture:
+//   • Server component (uses getSessionUser for nav CTA)
+//   • All sub-components in components/landing/
+//   • Inter font (already loaded globally), Tailwind only
+// ═══════════════════════════════════════════════════════════════
+
 import Link from 'next/link'
+import { getSessionUser } from '@/lib/supabase-server'
+import { ArrowRight, Sparkles, BarChart3, Mic, Building2, Briefcase, ShieldCheck, MapPin, Newspaper, Calculator } from 'lucide-react'
+import { ScrollReveal, CountUp } from '@/components/landing/ScrollReveal'
+import { HeroCinematic } from '@/components/landing/HeroCinematic'
+import { MockPitchCinematic } from '@/components/landing/MockPitchCinematic'
+import {
+  DeckAnalysisMockup,
+  MockPitchMockup,
+  InvestorMatchMockup,
+  CrmMockup,
+  NewsMockup,
+  CalculatorMockup,
+  JourneyArc,
+} from '@/components/landing/LandingMockups'
 
-export default function Home() {
+export const dynamic = 'force-dynamic'
+
+export default async function HomePage() {
+  const user = await getSessionUser()
+  const signedIn = !!user
+
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
-        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        :root{
-          --brand:#1a4d2e;--brand-mid:#2d7a4e;--brand-light:#E8F5E9;--brand-pale:#f0faf2;
-          --ink:#0d1f14;--ink-mid:#3d5045;--ink-light:#6b7d6e;
-          --border:#d6e4d9;--bg:#fafcfa;--white:#ffffff;
-          --font-display:'DM Serif Display',Georgia,serif;
-          --font-body:'DM Sans',system-ui,sans-serif;
-        }
-        html,body{background:var(--bg);color:var(--ink);font-family:var(--font-body)}
+    <div className="min-h-screen bg-surface-page text-text-primary">
 
-        /* NAV */
-        nav{display:flex;align-items:center;justify-content:space-between;padding:20px 48px;position:sticky;top:0;z-index:100;background:rgba(250,252,250,.9);backdrop-filter:blur(12px);border-bottom:1px solid transparent}
-        nav.scrolled{border-bottom-color:var(--border)}
-        .nav-logo{font-family:var(--font-display);font-size:20px;color:var(--brand);text-decoration:none;letter-spacing:-.3px}
-        .nav-links{display:flex;align-items:center;gap:32px}
-        .nav-links a{font-size:14px;color:var(--ink-mid);text-decoration:none;font-weight:400}
-        .nav-links a:hover{color:var(--brand)}
-        .nav-cta{background:var(--brand);color:white!important;padding:9px 20px;border-radius:10px;font-weight:500!important;transition:all .15s}
-        .nav-cta:hover{background:var(--brand-mid)!important;transform:translateY(-1px)}
-        @media(max-width:768px){nav{padding:16px 20px}.nav-links .hide{display:none}}
-
-        /* HERO */
-        .hero{max-width:1100px;margin:0 auto;padding:100px 48px 80px;text-align:center}
-        .hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--brand-light);color:var(--brand);font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;letter-spacing:.04em;margin-bottom:28px;text-transform:uppercase}
-        .hero-badge-dot{width:6px;height:6px;background:var(--brand);border-radius:50%;animation:pulse 2s ease-in-out infinite}
-        @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
-        .hero-title{font-family:var(--font-display);font-size:clamp(44px,7vw,76px);line-height:1.08;color:var(--ink);margin-bottom:24px;letter-spacing:-.03em}
-        .hero-title em{font-style:italic;color:var(--brand)}
-        .hero-sub{font-size:18px;color:var(--ink-light);max-width:560px;margin:0 auto 40px;line-height:1.7;font-weight:300}
-        .hero-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-        .btn-main{background:var(--brand);color:white;padding:16px 32px;border-radius:14px;font-size:16px;font-weight:500;font-family:var(--font-body);text-decoration:none;display:inline-flex;align-items:center;gap:8px;transition:all .15s;letter-spacing:-.01em}
-        .btn-main:hover{background:var(--brand-mid);transform:translateY(-2px);box-shadow:0 8px 24px rgba(26,77,46,.25)}
-        .btn-outline{background:transparent;color:var(--ink-mid);padding:15px 28px;border-radius:14px;font-size:16px;font-weight:500;font-family:var(--font-body);text-decoration:none;border:1.5px solid var(--border);display:inline-flex;align-items:center;gap:8px;transition:all .15s}
-        .btn-outline:hover{border-color:var(--ink-mid);color:var(--ink)}
-        .hero-note{font-size:12px;color:var(--ink-light);margin-top:16px}
-
-        /* STATS TICKER */
-        .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:32px 48px;display:flex;justify-content:center;gap:0}
-        .stat-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 48px;border-right:1px solid var(--border)}
-        .stat-item:last-child{border-right:none}
-        .stat-n{font-family:var(--font-display);font-size:36px;color:var(--brand);line-height:1}
-        .stat-l{font-size:12px;color:var(--ink-light);font-weight:400}
-        @media(max-width:768px){.stats{flex-wrap:wrap;padding:24px 20px;gap:24px}.stat-item{border-right:none;padding:0}}
-
-        /* HOW IT WORKS */
-        .section{max-width:1100px;margin:0 auto;padding:80px 48px}
-        .section-eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-bottom:12px}
-        .section-title{font-family:var(--font-display);font-size:clamp(32px,4vw,48px);color:var(--ink);margin-bottom:16px;letter-spacing:-.02em;line-height:1.15}
-        .section-sub{font-size:16px;color:var(--ink-light);max-width:500px;line-height:1.7;font-weight:300;margin-bottom:56px}
-
-        .steps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
-        @media(max-width:900px){.steps-grid{grid-template-columns:repeat(2,1fr)}}
-        @media(max-width:560px){.steps-grid{grid-template-columns:1fr}}
-        .step-card{background:var(--white);border:1px solid var(--border);border-radius:18px;padding:28px;position:relative;overflow:hidden}
-        .step-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--brand-light)}
-        .step-card.active::before{background:var(--brand)}
-        .step-num-lg{font-family:var(--font-display);font-size:48px;color:var(--brand-light);line-height:1;margin-bottom:16px}
-        .step-card-title{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:8px}
-        .step-card-desc{font-size:13px;color:var(--ink-light);line-height:1.6}
-
-        /* FEATURES */
-        .features{background:var(--brand);padding:80px 48px}
-        .features-inner{max-width:1100px;margin:0 auto}
-        .features-title{font-family:var(--font-display);font-size:clamp(32px,4vw,48px);color:white;margin-bottom:48px;letter-spacing:-.02em}
-        .features-title em{font-style:italic;color:#a8d5b5}
-        .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-        @media(max-width:900px){.features-grid{grid-template-columns:1fr 1fr}}
-        @media(max-width:560px){.features-grid{grid-template-columns:1fr}}
-        .feature-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:28px;transition:all .2s}
-        .feature-card:hover{background:rgba(255,255,255,.11);transform:translateY(-2px)}
-        .feature-icon{width:40px;height:40px;background:rgba(255,255,255,.12);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
-        .feature-title{font-size:15px;font-weight:600;color:white;margin-bottom:8px}
-        .feature-desc{font-size:13px;color:#a8d5b5;line-height:1.65}
-
-        /* CTA SECTION */
-        .cta-section{max-width:1100px;margin:0 auto;padding:80px 48px;text-align:center}
-        .cta-box{background:var(--brand-light);border:1px solid var(--border);border-radius:24px;padding:64px 48px}
-        .cta-title{font-family:var(--font-display);font-size:clamp(32px,4vw,52px);color:var(--brand);margin-bottom:16px;letter-spacing:-.02em}
-        .cta-sub{font-size:16px;color:var(--ink-light);margin-bottom:36px;font-weight:300}
-
-        /* FOOTER */
-        footer{border-top:1px solid var(--border);padding:32px 48px;display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto}
-        .footer-logo{font-family:var(--font-display);font-size:16px;color:var(--brand)}
-        .footer-links{display:flex;gap:24px}
-        .footer-links a{font-size:13px;color:var(--ink-light);text-decoration:none}
-        .footer-links a:hover{color:var(--brand)}
-        @media(max-width:560px){footer{flex-direction:column;gap:16px;text-align:center}}
-      `}</style>
-
-      <nav>
-        <a href="/" className="nav-logo">RaiseSEA</a>
-        <div className="nav-links">
-          <a href="/meet" className="hide">Meet experts</a>
-          <a href="/login" className="nav-cta">Sign in</a>
+      {/* ═══════════════════════════════════════════════════════════
+          NAV
+          ═══════════════════════════════════════════════════════════ */}
+      <nav className="sticky top-0 z-40 bg-surface-page/85 backdrop-blur border-b border-transparent">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="text-lg font-semibold text-brand tracking-tight">
+            RaiseSEA
+          </Link>
+          <div className="flex items-center gap-6">
+            <a href="#features"  className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Features</a>
+            <a href="#why-sea"   className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Why SEA</a>
+            <a href="#faq"       className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">FAQ</a>
+            {signedIn ? (
+              <Link href="/dashboard" className="text-sm font-medium bg-brand hover:bg-brand-hover text-text-inverse rounded-md px-3.5 py-1.5 transition-colors">
+                Open dashboard
+              </Link>
+            ) : (
+              <Link href="/login" className="text-sm font-medium bg-brand hover:bg-brand-hover text-text-inverse rounded-md px-3.5 py-1.5 transition-colors">
+                Sign in
+              </Link>
+            )}
+          </div>
         </div>
       </nav>
 
-      {/* HERO */}
-      <div className="hero">
-        <div className="hero-badge">
-          <span className="hero-badge-dot" />
-          Southeast Asia&apos;s fundraising intelligence platform
-        </div>
-        <h1 className="hero-title">
-          Raise smarter.<br />
-          Close <em>faster</em>.
-        </h1>
-        <p className="hero-sub">
-          Upload your pitch deck. Get AI-powered analysis, SEA market benchmarks, competitive intelligence, and matched to 750+ investors — in 60 seconds.
-        </p>
-        <div className="hero-actions">
-          <Link href="/login" className="btn-main">
-            Get started — sign in
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6"/></svg>
-          </Link>
-        </div>
-        <p className="hero-note">Magic link or Google sign-in · No password</p>
-      </div>
-
-      {/* STATS */}
-      <div className="stats">
-        {[['750+','Investors in database'],['8','Deck dimensions scored'],['60s','Full analysis time'],['12','SEA sectors covered']].map(([n,l])=>(
-          <div className="stat-item" key={n}>
-            <div className="stat-n">{n}</div>
-            <div className="stat-l">{l}</div>
+      {/* ═══════════════════════════════════════════════════════════
+          HERO
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 pt-16 pb-12 md:pt-24 md:pb-16">
+        <div className="max-w-4xl mx-auto text-center">
+          {/* Small pill above hero */}
+          <div className="inline-flex items-center gap-1.5 bg-brand-soft text-brand text-xs font-medium px-3 py-1 rounded-full mb-6">
+            <Sparkles className="w-3 h-3" strokeWidth={2} />
+            Built For SEA Founders
           </div>
-        ))}
-      </div>
 
-      {/* HOW IT WORKS */}
-      <div className="section">
-        <div className="section-eyebrow">How it works</div>
-        <h2 className="section-title">From deck to investors<br />in 4 steps</h2>
-        <p className="section-sub">No account needed. Just upload your pitch deck and get a full intelligence report.</p>
-        <div className="steps-grid">
-          {[
-            ['01','Submit','Fill a quick form and upload your pitch deck as a PDF.'],
-            ['02','Analyze','Gemini AI reads your deck, scores 8 dimensions, and runs market research.'],
-            ['03','Discover','Get matched to 750+ SEA investors ranked by fit score.'],
-            ['04','Connect','Request meetings directly from your results. No cold outreach.'],
-          ].map(([n,t,d],i)=>(
-            <div className={`step-card ${i===1?'active':''}`} key={n}>
-              <div className="step-num-lg">{n}</div>
-              <div className="step-card-title">{t}</div>
-              <div className="step-card-desc">{d}</div>
+          {/* The locked headline */}
+          <h1 className="text-4xl md:text-6xl font-semibold tracking-tight text-text-primary leading-[1.05]">
+            Raise Smarter.<br className="hidden sm:block" />{' '}Close Faster.
+          </h1>
+
+          <p className="text-lg md:text-xl text-text-secondary mt-5 font-medium">
+            Built For SEA Founders Raising Their Round.
+          </p>
+
+          <p className="text-base text-text-tertiary mt-4 max-w-2xl mx-auto leading-relaxed">
+            Score your deck. Drill your pitch. Match with active SEA investors. Track every conversation — all benchmarked on real SEA raises.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
+            <Link
+              href={signedIn ? '/apply' : '/login?next=/apply'}
+              className="group inline-flex items-center gap-2 bg-brand hover:bg-brand-hover text-text-inverse font-medium text-base rounded-lg px-6 py-3 transition-all shadow-subtle hover:shadow-elevated"
+            >
+              Analyze your deck
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.75} />
+            </Link>
+            <a
+              href="#features"
+              className="inline-flex items-center gap-2 text-base text-text-secondary hover:text-text-primary px-4 py-3 transition-colors"
+            >
+              See how it works
+            </a>
+          </div>
+
+          <p className="text-xs text-text-tertiary mt-6">
+            Free while we build. No credit card. 60 seconds from upload to analysis.
+          </p>
+        </div>
+
+        {/* Hero product preview — cinematic auto-loop showing the full journey */}
+        <div className="max-w-5xl mx-auto mt-14 md:mt-20">
+          <HeroCinematic />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          TRUST STRIP — the numbers (locked: show all current numbers)
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 pb-16 md:pb-20">
+        <div className="max-w-5xl mx-auto">
+          <ScrollReveal>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-2xl overflow-hidden border border-border">
+              <Stat number={750} suffix="+" label="Active SEA investors" sub="Singapore · Indonesia · Vietnam · more" />
+              <Stat number={8}            label="Deck dimensions" sub="Scored independently, 0–100" />
+              <Stat number={60}  suffix="s" label="Analysis time" sub="From upload to full report" />
+              <Stat number={6}            label="Tools in one"   sub="Analysis · Practice · Match · CRM · News · SAFE" />
             </div>
-          ))}
+          </ScrollReveal>
         </div>
-      </div>
+      </section>
 
-      {/* FEATURES */}
-      <div className="features">
-        <div className="features-inner">
-          <h2 className="features-title">
-            Intelligence that goes<br />
-            <em>beyond matching</em>
-          </h2>
-          <div className="features-grid">
-            {[
-              ['Deck intelligence','8-dimension scoring with adaptive weights per stage. Specific feedback per slide. Priority fixes ranked by impact.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>],
-              ['Market analysis','TAM/SAM/SOM with bottom-up methodology. Valuation football field. Comparable SEA deals from 2024-2025.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>],
-              ['Competitive intelligence','5 SEA direct competitors + 3 global benchmarks. Moat score across 6 dimensions. Conflict-of-interest detection.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>],
-              ['Sector-weighted valuation','Blended EV/Revenue multiples weighted by your sector profile. Pre-built SEA benchmark database validated in real-time.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>],
-              ['Investor matching','750+ SEA investors scored on stage, sector, ticket, geography, thesis alignment, and active confidence.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="m21 21-6-6m6 6v-4.8m0 4.8h-4.8"/><path d="M3 16.2V21m0 0h4.8M3 21l6-6"/><path d="M21 7.8V3m0 0h-4.8M21 3l-6 6"/><path d="M3 7.8V3m0 0h4.8M3 3l6 6"/></svg>],
-              ['Meet experts','Request 30-min meetings with VCs, angels, industry experts, tech advisors, and mentors across SEA.',<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>],
-            ].map(([t,d,icon])=>(
-              <div className="feature-card" key={t as string}>
-                <div className="feature-icon">{icon}</div>
-                <div className="feature-title">{t}</div>
-                <div className="feature-desc">{d}</div>
+      {/* ═══════════════════════════════════════════════════════════
+          JOURNEY VISUALIZATION
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="journey" className="px-6 pb-24">
+        <div className="max-w-5xl mx-auto">
+          <ScrollReveal>
+            <div className="text-center mb-12">
+              <div className="text-xs font-semibold uppercase tracking-wider text-brand mb-3">The journey</div>
+              <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
+                From your deck to your next round.
+              </h2>
+              <p className="text-base text-text-tertiary mt-3 max-w-2xl mx-auto leading-relaxed">
+                Most fundraising tools cover one piece. RaiseSEA wires the whole arc together — so the work you do in one step actually feeds the next.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delay={120}>
+            <JourneyArc />
+          </ScrollReveal>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 1: DECK ANALYSIS
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="features" className="px-6 py-20 bg-surface-card border-y border-border">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="ASSESS"
+            kickerIcon={<BarChart3 className="w-4 h-4" strokeWidth={1.75} />}
+            title="Know exactly where your deck stands."
+            description="Upload your deck. In 60 seconds, you get a score out of 100 across 8 dimensions, market sizing benchmarked on SEA raises, a recommended valuation range, competitor moat analysis, and matched investors. No guesswork."
+            bullets={[
+              'Score breakdown by dimension (problem, market, traction, team, financials, GTM, business model, competition)',
+              'SEA-grounded TAM/SAM/SOM and valuation benchmarks',
+              'Priority fixes ranked by score impact, not generic "improve your deck"',
+            ]}
+            mockup={<DeckAnalysisMockup />}
+            mockupRight
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 2: MOCK PITCH + Q&A
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-20">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="PREPARE"
+            kickerIcon={<Mic className="w-4 h-4" strokeWidth={1.75} />}
+            title="Practice the answers out loud — before the meeting."
+            description="Most decks die in the first 60 seconds of investor review. Practice your delivery against an AI that listens, scores, and asks the same hard questions a real SEA investor would. Voice-based, not text. Muscle memory, not theory."
+            bullets={[
+              'Full pitch run-through or investor Q&A drill mode',
+              'Per-slide pace + coverage feedback, scored per dimension',
+              'AI generates the likely follow-up questions specific to YOUR deck',
+            ]}
+            mockup={<MockPitchCinematic />}
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 3: INVESTOR MATCHING
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-20 bg-surface-card border-y border-border">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="MATCH"
+            kickerIcon={<Building2 className="w-4 h-4" strokeWidth={1.75} />}
+            title="The 750+ funds actually writing checks in SEA."
+            description="Stop scrolling Crunchbase for six hours. Every match comes with a clear reason — sector fit, stage fit, geography fit — plus the warm-intro paths from your network. Built around how SEA fundraising actually works, where Singapore captures 90%+ of regional capital."
+            bullets={[
+              '750+ SEA-active VCs, angels, family offices, corporate venture',
+              'Matched by stage, sector, geography, and check size',
+              'Warm intro suggestions from your network',
+            ]}
+            mockup={<InvestorMatchMockup />}
+            mockupRight
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 4: CRM
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-20">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="EXECUTE"
+            kickerIcon={<Briefcase className="w-4 h-4" strokeWidth={1.75} />}
+            title="Track every conversation. Stop using a spreadsheet."
+            description="Built-in CRM purpose-made for fundraising. Stage every investor (Researched → Contacted → In talks → Term sheet), set next actions with dates, log notes after every call. No more babysitting a Notion table you forget to update."
+            bullets={[
+              'Pipeline stages tuned for fundraising (not generic sales)',
+              'Per-contact next action + due date + timestamped notes log',
+              'Filter by priority, source, stage, contact type, search',
+            ]}
+            mockup={<CrmMockup />}
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 5: NEWS INTELLIGENCE
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-20 bg-surface-card border-y border-border">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="STAY SHARP"
+            kickerIcon={<Newspaper className="w-4 h-4" strokeWidth={1.75} />}
+            title="Know what's moving in SEA — without doomscrolling."
+            description="A curated weekly digest of SEA fundraising news: new rounds, fund mandates, sector shifts. Filtered by your stage and sector — not infinite-scroll, not paywalled, not buried in five different newsletters. Delivered Monday morning. Read in 5 minutes."
+            bullets={[
+              'Weekly digest filtered by your sector + stage',
+              'Funding rounds, investor mandates, sector trends',
+              'Email-first, web archive for reference — your call how to consume it',
+            ]}
+            mockup={<NewsMockup />}
+            mockupRight
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FEATURE 6: SAFE CALCULATOR
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-20">
+        <div className="max-w-6xl mx-auto">
+          <FeatureSection
+            kicker="DECIDE"
+            kickerIcon={<Calculator className="w-4 h-4" strokeWidth={1.75} />}
+            title="Three calculators. One question: what does this really cost you?"
+            description="Every fundraise instrument hides its real impact behind jargon. RaiseSEA gives you three calculators — Equity, Debt, and SAFE/Note — to model exactly what you're signing. See your dilution, your repayment burden, your conversion math, all benchmarked against SEA stage norms."
+            bullets={[
+              'Equity: priced rounds with full cap-table modeling, scenario analysis, and SEA-benchmarked dilution insight',
+              'Debt: standard amortization with monthly payment, total interest, and full per-month schedule',
+              'SAFE / Note: post-money, pre-money, and convertible note — all three instruments, all three conversion paths',
+            ]}
+            mockup={<CalculatorMockup />}
+          />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          WHY SEA-FIRST (soft wedge)
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="why-sea" className="px-6 py-24 bg-brand text-text-inverse">
+        <div className="max-w-4xl mx-auto">
+          <ScrollReveal>
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-1.5 bg-white/10 text-text-inverse text-xs font-medium px-3 py-1 rounded-full mb-5">
+                <MapPin className="w-3 h-3" strokeWidth={2} />
+                SEA-First
               </div>
-            ))}
+              <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
+                Built around how SEA fundraising actually works.
+              </h2>
+              <p className="text-base text-white/70 mt-4 max-w-2xl mx-auto leading-relaxed">
+                Generic AI fundraising tools are trained on US data. That means US growth benchmarks, US valuations, US investors. RaiseSEA is the opposite.
+              </p>
+            </div>
+          </ScrollReveal>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            <SeaPoint
+              title="SEA market benchmarks"
+              body="Seed in SEA is $250K–$1.5M. We benchmark against actual SEA raises, not US Series A growth charts."
+            />
+            <SeaPoint
+              title="Active SEA investors"
+              body="750+ funds across Singapore, Indonesia, Vietnam, Thailand, Philippines, Malaysia. Filtered by who's actually writing checks now."
+            />
+            <SeaPoint
+              title="SEA-specific Q&A"
+              body="Practice for the questions SEA investors actually ask — regulatory navigation, cross-border expansion, Singapore routing."
+            />
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* CTA */}
-      <div className="cta-section">
-        <div className="cta-box">
-          <h2 className="cta-title">Ready to raise smarter?</h2>
-          <p className="cta-sub">Upload your deck and get your investor intelligence report in 60 seconds. Free, no account required.</p>
-          <Link href="/apply" className="btn-main" style={{display:'inline-flex'}}>
-            Get matched now
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6"/></svg>
-          </Link>
+      {/* ═══════════════════════════════════════════════════════════
+          PRICING (soft)
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="pricing" className="px-6 py-20">
+        <div className="max-w-3xl mx-auto text-center">
+          <ScrollReveal>
+            <div className="text-xs font-semibold uppercase tracking-wider text-brand mb-3">Pricing</div>
+            <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              Free while we build.
+            </h2>
+            <p className="text-base text-text-tertiary mt-4 leading-relaxed max-w-2xl mx-auto">
+              We're in our build phase and want SEA founders using RaiseSEA without thinking about pricing. When we launch paid plans, you'll get plenty of notice — and grandfathered pricing for early users.
+            </p>
+            <div className="mt-8 inline-flex items-center gap-2 text-sm text-text-secondary">
+              <ShieldCheck className="w-4 h-4 text-success-text" strokeWidth={1.75} />
+              <span>No credit card. No trial timer. No "schedule a demo."</span>
+            </div>
+          </ScrollReveal>
         </div>
-      </div>
+      </section>
 
-      <footer>
-        <div className="footer-logo">RaiseSEA</div>
-        <div className="footer-links">
-          <a href="/login">Sign in</a>
-          <a href="/meet">Meet experts</a>
+      {/* ═══════════════════════════════════════════════════════════
+          FAQ
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="faq" className="px-6 py-20 bg-surface-card border-y border-border">
+        <div className="max-w-3xl mx-auto">
+          <ScrollReveal>
+            <div className="text-center mb-12">
+              <div className="text-xs font-semibold uppercase tracking-wider text-brand mb-3">Common questions</div>
+              <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">Honest answers.</h2>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delay={120}>
+            <div className="space-y-3">
+              <FaqItem
+                q="What does RaiseSEA actually do?"
+                a="Four things that work together: (1) deck analysis with SEA-benchmarked scoring, (2) AI mock pitch and Q&A practice with voice scoring, (3) matching with 750+ SEA-active investors, (4) a built-in CRM to track every conversation. Most tools do one of these. We do all four."
+              />
+              <FaqItem
+                q="How is this different from Evalyze, Kydarin, or OpenVC?"
+                a="Evalyze is US-trained on 8,000 US-skewed raises and lacks pitch practice. Kydarin only does pitch simulation. OpenVC is mostly a global investor database. None are SEA-native. RaiseSEA is the only platform combining all four capabilities AND benchmarked on SEA raises, where seed is $250K–$1.5M, not US's $2–5M."
+              />
+              <FaqItem
+                q="Is my deck content stored or used to train AI?"
+                a="Your deck is stored privately in your account so you can return to your analysis. We don't train models on your content. We don't share your deck with investors unless you explicitly do so."
+              />
+              <FaqItem
+                q="What stage of company is this for?"
+                a="Pre-seed through Series B. Most useful for founders preparing a raise in the next 0–6 months. If you already have term sheets, the CRM + pitch practice still help. If you haven't built a deck yet, build one first — we analyze decks, we don't generate them."
+              />
+              <FaqItem
+                q="Who built this?"
+                a="A founder who's raised in SEA, frustrated by tools built for the US market. RaiseSEA exists because the existing AI fundraising stack punishes SEA founders for being capital-efficient instead of capital-burning."
+              />
+              <FaqItem
+                q="What if my company isn't in SEA?"
+                a="The deck analysis and pitch practice still work well. The investor matching skews toward SEA-active funds (so it's less useful for non-SEA raises). If you're raising in SEA from anywhere — including diaspora-founded companies routing through Singapore — you're our target user."
+              />
+            </div>
+          </ScrollReveal>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FINAL CTA
+          ═══════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-24">
+        <div className="max-w-3xl mx-auto text-center">
+          <ScrollReveal>
+            <h2 className="text-3xl md:text-5xl font-semibold tracking-tight leading-tight">
+              Your next round starts with the next 60 seconds.
+            </h2>
+            <p className="text-lg text-text-tertiary mt-5 max-w-xl mx-auto leading-relaxed">
+              Upload your deck. See where you stand. Decide what's next.
+            </p>
+            <Link
+              href={signedIn ? '/apply' : '/login?next=/apply'}
+              className="group inline-flex items-center gap-2 bg-brand hover:bg-brand-hover text-text-inverse font-medium text-base rounded-lg px-7 py-3.5 transition-all shadow-subtle hover:shadow-elevated mt-8"
+            >
+              Analyze your deck
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" strokeWidth={1.75} />
+            </Link>
+            <p className="text-xs text-text-tertiary mt-6">Free. No credit card. No trial timer.</p>
+          </ScrollReveal>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FOOTER
+          ═══════════════════════════════════════════════════════════ */}
+      <footer className="border-t border-border bg-surface-card">
+        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-base font-semibold text-brand tracking-tight">RaiseSEA</Link>
+            <span className="text-xs text-text-tertiary">© 2026 · Built for SEA founders</span>
+          </div>
+          <div className="flex items-center gap-6 text-xs text-text-tertiary">
+            <Link href="/glossary"  className="hover:text-text-primary transition-colors">Glossary</Link>
+            <a href="#features"     className="hover:text-text-primary transition-colors">Features</a>
+            <a href="#why-sea"      className="hover:text-text-primary transition-colors">Why SEA</a>
+            <a href="#faq"          className="hover:text-text-primary transition-colors">FAQ</a>
+          </div>
         </div>
       </footer>
-    </>
+
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+function Stat({ number, suffix = '', label, sub }: { number: number; suffix?: string; label: string; sub: string }) {
+  return (
+    <div className="bg-surface-card p-6 md:p-7 text-center">
+      <div className="text-3xl md:text-4xl font-semibold text-text-primary tracking-tight">
+        <CountUp end={number} suffix={suffix} />
+      </div>
+      <div className="text-sm font-medium text-text-primary mt-1.5">{label}</div>
+      <div className="text-xs text-text-tertiary mt-1 leading-relaxed">{sub}</div>
+    </div>
+  )
+}
+
+function FeatureSection({
+  kicker, kickerIcon, title, description, bullets, mockup, mockupRight = false
+}: {
+  kicker: string
+  kickerIcon: React.ReactNode
+  title: string
+  description: string
+  bullets: string[]
+  mockup: React.ReactNode
+  mockupRight?: boolean
+}) {
+  return (
+    <div className={`grid md:grid-cols-2 gap-12 md:gap-16 items-center ${mockupRight ? '' : 'md:[&>*:first-child]:order-2'}`}>
+      <ScrollReveal>
+        <div className="inline-flex items-center gap-1.5 bg-brand-soft text-brand text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full mb-5">
+          {kickerIcon}
+          {kicker}
+        </div>
+        <h2 className="text-3xl md:text-4xl font-semibold text-text-primary tracking-tight leading-tight">
+          {title}
+        </h2>
+        <p className="text-base text-text-secondary mt-4 leading-relaxed">
+          {description}
+        </p>
+        <ul className="mt-6 space-y-3">
+          {bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-3 text-sm text-text-secondary leading-relaxed">
+              <span className="w-1 h-1 rounded-full bg-brand mt-2 shrink-0" aria-hidden="true" />
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      </ScrollReveal>
+
+      <ScrollReveal delay={120}>
+        {mockup}
+      </ScrollReveal>
+    </div>
+  )
+}
+
+function SeaPoint({ title, body }: { title: string; body: string }) {
+  return (
+    <ScrollReveal>
+      <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+        <h3 className="text-base font-semibold text-text-inverse">{title}</h3>
+        <p className="text-sm text-white/70 mt-2 leading-relaxed">{body}</p>
+      </div>
+    </ScrollReveal>
+  )
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  return (
+    <details className="group bg-surface-page border border-border rounded-xl p-5 open:bg-white transition-colors">
+      <summary className="cursor-pointer flex items-center justify-between gap-4 list-none">
+        <h3 className="text-base font-medium text-text-primary">{q}</h3>
+        <span className="shrink-0 text-text-tertiary group-open:rotate-45 transition-transform">
+          <svg viewBox="0 0 12 12" className="w-3 h-3" aria-hidden="true">
+            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </span>
+      </summary>
+      <p className="text-sm text-text-secondary mt-3 leading-relaxed">{a}</p>
+    </details>
   )
 }
