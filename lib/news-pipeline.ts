@@ -705,7 +705,7 @@ Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat
 }`
 
   try {
-    const text = await callGeminiText(prompt, { json: true, maxTokens: 2048 })
+    const text = await callGeminiText(prompt, { json: true, maxTokens: 8192 })
     const parsed = safeParseJson<{ headline?: string; body?: string; takeaway?: string }>(text)
     if (!parsed || !parsed.body) {
       console.warn('[editors-take] parse failed or empty body. Raw:', text.slice(0, 200).replace(/\n/g, '\\n'))
@@ -795,7 +795,10 @@ ${candidateBlocks.join('\n\n')}`
 
   let parsed: Record<string, { pick?: number; headline?: string; why?: string }> | null = null
   try {
-    const text = await callGeminiText(prompt, { json: true, maxTokens: 2048 }, makeRunState())
+    // 4 categories × (headline + why) — give it real headroom. At 2048 the
+    // JSON truncated after the first 1-2 categories, dropping policy + exit
+    // (they're last in the object). 8192 + bounded thinking fits all four.
+    const text = await callGeminiText(prompt, { json: true, maxTokens: 8192 }, makeRunState())
     parsed = safeParseJson(text)
   } catch (err) {
     console.error('[top-stories] gemini failed:', err)
