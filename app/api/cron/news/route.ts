@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { runNewsPipeline } from '@/lib/news-pipeline'
 import { sendWeeklyDigest } from '@/lib/digest-builder'
+import { ensureEditorialContent } from '@/lib/editorial-autofill'
 
 export const maxDuration = 300
 
@@ -36,13 +37,19 @@ export async function GET(req: Request) {
   const shouldSendDigest = isMondayMorningUtc || force === 'digest'
 
   let digestResult = null
+  let autofill = null
   if (shouldSendDigest) {
+    // Just-in-time fallback (Option B): if the admin approved nothing this week,
+    // auto-approve quality items + auto-generate & verify the take, so the email
+    // always has content. No-ops when the admin already did the work.
+    autofill = await ensureEditorialContent(now)
     digestResult = await sendWeeklyDigest({ triggeredBy: 'cron' })
   }
 
   return NextResponse.json({
     ok: true,
     pipeline: pipelineResult,
+    autofill,
     digest: digestResult,
   })
 }

@@ -12,6 +12,14 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from './supabase'
+import {
+  clusterStories,
+  clustersByCategory,
+  TOP_STORY_CATEGORIES,
+  type StoryItem,
+  type CategorizedTopStories,
+  type TopStoryCategory,
+} from './news-clustering'
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'] as const
@@ -558,6 +566,16 @@ export async function runNewsPipeline(): Promise<{
     if (scope === 'sea' && !extracted.is_sea_relevant) { skipped++; return }
     if (scope === 'global' && !extracted.is_globally_interesting) { skipped++; return }
 
+    // Guard: a truncated/garbled Gemini reply can still parse (via safeParseJson's
+    // repair path) into an object whose AI fields are empty. Don't persist a
+    // half-baked row — skip it and let the next cron retry the URL (RSS + URL
+    // dedupe keep the pipeline idempotent, so nothing is lost permanently).
+    if (!extracted.ai_summary?.trim() || !extracted.ai_why_it_matters?.trim()) {
+      console.warn('[news-pipeline] dropping item with empty AI fields:', item.title.slice(0, 60))
+      errors++
+      return
+    }
+
     const { error } = await supabaseAdmin
       .from('news_items')
       .insert({
@@ -681,4 +699,110 @@ Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat
     console.error('[editors-take] gemini failed:', err)
     return null
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Top Stories — categorized, AI-selected, with REAL source coverage.
+//
+// Hybrid: clustering finds candidates + the objective "N sources" signal,
+// then Gemini picks the single most important story per category and writes
+// the headline + "why it matters" (SEA-first). The chosen cluster's real
+// source list/coverage are attached — never invented by the model.
+// Generated + stored + approved alongside the Editor's Take.
+// ═══════════════════════════════════════════════════════════════
+export async function generateTopStories(): Promise<CategorizedTopStories | null> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
+  const { data: items } = await supabaseAdmin
+    .from('news_items')
+    .select('id, category, title, company_name, amount_usd, stage, sector, country, source_url, source_name, ai_summary, published_at, region_scope')
+    .eq('status', 'approved')
+    .gte('published_at', sevenDaysAgo)
+    .order('published_at', { ascending: false })
+    .limit(200)
+
+  if (!items || items.length === 0) {
+    console.log('[top-stories] no approved items to rank')
+    return null
+  }
+
+  const clusters = clusterStories(items as StoryItem[])
+  const byCat = clustersByCategory(clusters, 6)
+
+  const catTitles: Record<TopStoryCategory, string> = {
+    fundraising: 'FUNDRAISING (a specific named startup raised money)',
+    tech:        'TECH & PRODUCT (product launches, AI deals, platform shifts)',
+    policy:      'POLICY & ECONOMIC (a specific regulation or macro shift)',
+    exit:        'EXIT (a specific acquisition, IPO, or secondary sale)',
+  }
+
+  const fmtAmount = (n: number | null) => (n ? ` ($${(n / 1e6).toFixed(1)}M)` : '')
+  const candidateBlocks: string[] = []
+  for (const cat of TOP_STORY_CATEGORIES) {
+    const cands = byCat[cat]
+    const lines = cands.length === 0
+      ? '(no candidates this week)'
+      : cands.map((c, i) => {
+          const p = c.primary
+          const label = p.company_name ? `${p.company_name}${fmtAmount(p.amount_usd)}` : p.title
+          return `[${i + 1}] ${label} — ${p.sector || '?'}, ${p.country || '?'} — covered by ${c.coverage} source(s) — ${p.ai_summary || p.title}`
+        }).join('\n')
+    candidateBlocks.push(`### ${catTitles[cat]}\n${lines}`)
+  }
+
+  const prompt = `You are the editor of RaiseSEA, picking THE single most important story in each of 4 categories for Southeast Asian (SEA) startup founders this week.
+
+For EACH category below, choose the ONE candidate that matters most to a SEA founder, and write:
+- "headline": a punchy, specific headline (<= 12 words). Use the real company/event — never vague.
+- "why": ONE sentence (<= 30 words) on why a SEA founder should care. Concrete; avoid "this shows continued interest".
+
+SEA-FIRST RULE: prefer Southeast Asia stories. Only pick a global/non-SEA candidate if it's a genuinely major signal that will ripple to SEA — and if so, the "why" MUST state the SEA implication.
+
+If a category has no candidate worth featuring (weak or empty), set "pick" to 0 for that category.
+
+Return STRICTLY this JSON (no markdown fences, no preamble). "pick" is the [number] of the chosen candidate, or 0 for none:
+{
+  "fundraising": { "pick": 1, "headline": "...", "why": "..." },
+  "tech":        { "pick": 0 },
+  "policy":      { "pick": 2, "headline": "...", "why": "..." },
+  "exit":        { "pick": 0 }
+}
+
+CANDIDATES:
+${candidateBlocks.join('\n\n')}`
+
+  let parsed: Record<string, { pick?: number; headline?: string; why?: string }> | null = null
+  try {
+    const text = await callGeminiText(prompt, { json: true, maxTokens: 2048 }, makeRunState())
+    parsed = safeParseJson(text)
+  } catch (err) {
+    console.error('[top-stories] gemini failed:', err)
+    return null
+  }
+  if (!parsed) { console.warn('[top-stories] parse failed'); return null }
+
+  const result: CategorizedTopStories = { fundraising: null, tech: null, policy: null, exit: null }
+  for (const cat of TOP_STORY_CATEGORIES) {
+    const pickObj = parsed[cat]
+    const pick = pickObj?.pick
+    if (!pick || pick < 1) continue
+    const cluster = byCat[cat][pick - 1]
+    if (!cluster) continue
+    const headline = (pickObj.headline || '').trim().slice(0, 160)
+    const why = (pickObj.why || '').trim().slice(0, 400)
+    if (!headline) continue
+    result[cat] = {
+      id:         cluster.primary.id,
+      headline,
+      why,
+      sector:     cluster.primary.sector,
+      country:    cluster.primary.country,
+      coverage:   cluster.coverage,
+      sources:    cluster.sources,
+      source_url: cluster.primary.source_url,
+    }
+  }
+
+  const anyPicked = TOP_STORY_CATEGORIES.some(c => result[c] !== null)
+  if (!anyPicked) { console.log('[top-stories] AI picked nothing worth featuring'); return null }
+  return result
 }

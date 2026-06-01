@@ -16,6 +16,7 @@ export default function PitchSession({ sessionId, durationMin, company, deckUrl,
   const [slide, setSlide] = useState(1)
   const [turns, setTurns] = useState<PitchTurn[]>([])
   const [finishing, setFinishing] = useState(false)
+  const [timeUp, setTimeUp] = useState(false)
   const [textMode, setTextMode] = useState(false)
   const [textInput, setTextInput] = useState('')
 
@@ -69,7 +70,7 @@ export default function PitchSession({ sessionId, durationMin, company, deckUrl,
     const interval = setInterval(() => {
       setElapsed(prev => {
         const next = prev + 1
-        if (next >= totalSeconds) { finishSession('completed'); return prev }
+        if (next >= totalSeconds) { setTimeUp(true); finishSession('completed'); return prev }
         return next
       })
     }, 1000)
@@ -180,6 +181,11 @@ export default function PitchSession({ sessionId, durationMin, company, deckUrl,
 
   return (
     <div className="max-w-5xl">
+      {timeUp && (
+        <div className="mb-3 bg-warning-bg border border-warning-border rounded-lg px-4 py-2.5 text-sm text-warning-text font-medium flex items-center gap-2">
+          ⏰ Time&apos;s up — submitting your pitch and generating your debrief…
+        </div>
+      )}
       <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">🎙️ Pitching {company}</h1>

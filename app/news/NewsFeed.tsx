@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import type { CategorizedTopStories, TopStory as AITopStory, TopStoryCategory } from '@/lib/news-clustering'
 
 type Item = {
   id: string
@@ -54,6 +55,7 @@ type Props = {
   editorsTake: EditorsTake | null
   trending: Trending
   topStories: TopStory[]
+  categorizedTopStories: CategorizedTopStories | null
   glance: Glance
   dateRange: string
   weekStats: { dealCount: number; totalRaised: number; sectorCount: number }
@@ -95,7 +97,7 @@ function searchRank(item: Item, tokens: string[]): number {
   return score
 }
 
-export default function NewsFeed({ items, userSectors, editorsTake, trending, topStories, glance, dateRange, weekStats }: Props) {
+export default function NewsFeed({ items, userSectors, editorsTake, trending, topStories, categorizedTopStories, glance, dateRange, weekStats }: Props) {
   // Filters
   const [query, setQuery]       = useState<string>('')
   const [region, setRegion]     = useState<'all' | 'sea' | 'global'>('all')
@@ -220,7 +222,9 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
       )}
 
       {/* Top stories — most-covered this week (grouped across sources) */}
-      {topStories.length > 0 && (
+      {categorizedTopStories ? (
+        <CategorizedTopStoriesBlock stories={categorizedTopStories} />
+      ) : topStories.length > 0 && (
         <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-5 mb-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-base">🔥</span>
@@ -346,6 +350,53 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
       <p className="text-[11px] text-gray-400 text-center mt-8">
         Showing approved items from the last 7 days. <Link href="/news/history" className="underline">Browse past weeks →</Link>
       </p>
+    </div>
+  )
+}
+
+// Categorized Top Stories — one AI-picked story per category, with real coverage.
+const TOP_STORY_ORDER: { key: TopStoryCategory; label: string }[] = [
+  { key: 'fundraising', label: '💰 Top fundraising' },
+  { key: 'tech',        label: '⚡ Top tech & product' },
+  { key: 'policy',      label: '🏛 Top policy & economic' },
+  { key: 'exit',        label: '🚪 Top exit' },
+]
+
+function CategorizedTopStoriesBlock({ stories }: { stories: CategorizedTopStories }) {
+  const present = TOP_STORY_ORDER.filter(c => stories[c.key])
+  if (present.length === 0) return null
+  return (
+    <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-5 mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-base">🔥</span>
+        <h2 className="text-sm font-semibold text-gray-900">Top stories this week</h2>
+        <span className="text-[10px] text-gray-500">editor&apos;s pick per category</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {present.map(({ key, label }) => {
+          const s = stories[key] as AITopStory
+          return (
+            <div key={key} className="bg-white border border-amber-100 rounded-lg p-3.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1.5">{label}</div>
+              <div className="text-sm font-semibold text-gray-900 leading-snug">{s.headline}</div>
+              {s.why && <p className="text-xs text-gray-700 leading-relaxed mt-1.5">{s.why}</p>}
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                {s.sector && <span className="text-[10px] bg-gray-50 border border-border text-gray-600 px-1.5 py-0.5 rounded-full">{s.sector}</span>}
+                {s.country && <span className="text-[10px] bg-gray-50 border border-border text-gray-600 px-1.5 py-0.5 rounded-full">📍 {s.country}</span>}
+                {s.coverage >= 2 && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{s.coverage} sources</span>}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                {(s.sources || []).slice(0, 5).map((src, i) => (
+                  <a key={i} href={src.url} target="_blank" rel="noopener noreferrer"
+                    className="text-[11px] text-[#1a4d2e] hover:underline">
+                    {src.name} ↗
+                  </a>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

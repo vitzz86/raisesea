@@ -53,6 +53,7 @@ export default async function DebriefPage({ params, searchParams }: {
         debrief={session.debrief as Debrief | null}
         startedAt={session.started_at as string}
         isGenerating={generating === '1' && !session.debrief}
+        status={session.status as string}
       />
     </DashboardShell>
   )

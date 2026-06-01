@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import type { CategorizedTopStories, TopStory as AITopStory, TopStoryCategory } from '@/lib/news-clustering'
 
 type Item = {
   id: string
@@ -28,6 +29,7 @@ type Take = {
   content: string
   headline?: string | null
   takeaway?: string | null
+  top_stories?: CategorizedTopStories | null
   status: string
   created_at: string
 }
@@ -64,6 +66,43 @@ export default function AdminNewsTabs({
       {tab === 'queue'  && <QueueTab items={items} />}
       {tab === 'editor' && <EditorTab takes={takes} />}
       {tab === 'send'   && <SendTab subscriberCount={subscriberCount} subscribers={subscribers} approvedItems={items.filter(i => i.status === 'approved')} takes={takes} />}
+    </div>
+  )
+}
+
+function TopStoriesPreview({ stories }: { stories?: CategorizedTopStories | null }) {
+  const order: { key: TopStoryCategory; label: string }[] = [
+    { key: 'fundraising', label: '💰 Fundraising' },
+    { key: 'tech',        label: '⚡ Tech' },
+    { key: 'policy',      label: '🏛 Policy' },
+    { key: 'exit',        label: '🚪 Exit' },
+  ]
+  const present = stories ? order.filter(o => stories[o.key]) : []
+  if (present.length === 0) {
+    return (
+      <div className="text-[11px] text-text-tertiary mb-3">
+        No AI top stories attached to this take{stories === undefined ? ' (generated before this feature)' : ''}.
+      </div>
+    )
+  }
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-2">🔥 Top stories (per category)</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {present.map(({ key, label }) => {
+          const s = stories![key] as AITopStory
+          return (
+            <div key={key} className="bg-white border border-amber-100 rounded p-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 mb-1">{label}</div>
+              <div className="text-xs font-semibold text-text-primary leading-snug">{s.headline}</div>
+              {s.why && <p className="text-[11px] text-text-secondary leading-relaxed mt-1">{s.why}</p>}
+              <div className="text-[10px] text-text-tertiary mt-1">
+                {[s.sector, s.country].filter(Boolean).join(' · ')}{s.coverage >= 2 ? ` · ${s.coverage} sources` : ''}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -414,6 +453,7 @@ function TakeRow({ take, onPatch, working }: { take: Take; onPatch: (id: string,
               </div>
             )}
           </div>
+          <TopStoriesPreview stories={take.top_stories} />
           <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
             {take.status !== 'approved' && (
               <button onClick={() => onPatch(take.id, { status: 'approved' })} disabled={working}

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
-import type { Debrief, DimensionScore, PitchTurn, QATurn, Question, SlideBreakdown, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
+import type { Debrief, DimensionScore, PitchTurn, QATurn, Question, ContentDimension, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
 import { distillDeckAnalysis, businessProfileHeader, MONEY_FORMAT_INSTRUCTION } from '@/lib/mock-pitch-context'
 
 export const maxDuration = 120
@@ -104,8 +104,14 @@ Return STRICTLY this JSON, no markdown fences, no preamble. Keep each text field
     "confidence":   { "score": <0-100>, "max_score": 100, "weight_pct": 15, "found": [...], "missing": [...], "best_practice": "...", "fix_effort": "...", "score_impact": "..." },
     "coverage":     { "score": <0-100>, "max_score": 100, "weight_pct": 15, "found": [...], "missing": [...], "best_practice": "...", "fix_effort": "...", "score_impact": "..." }
   },
-  "per_slide": [
-    { "slide": 1, "score": <0-100>, "pace": "silent|too fast|good|too slow", "what_worked": ["..."], "what_to_improve": ["..."], "best_practice": "<concrete how-a-top-founder-pitches-this-slide>", "how_to_be_better": "<tailored to what THIS founder did>" }
+  "content_dimensions": [
+    { "key": "traction",       "label": "Traction",              "score": <0-100>, "slides": [<every slide # where addressed>], "found": ["<what they actually SAID, transcript-grounded>"], "missing": ["<what was weak or absent>"], "best_practice": "<sector-specific how to deliver this well>" },
+    { "key": "problem",        "label": "Problem & opportunity", "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." },
+    { "key": "solution",       "label": "Solution & product",    "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." },
+    { "key": "team",           "label": "Team",                  "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." },
+    { "key": "market_size",    "label": "Market size",           "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." },
+    { "key": "business_model", "label": "Business model",        "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." },
+    { "key": "financials",     "label": "Financials & ask",      "score": <0-100>, "slides": [...], "found": [...], "missing": [...], "best_practice": "..." }
   ],
   "priority_fixes": [
     { "priority": "critical|high|polish", "title": "<short>", "description": "...", "score_impact": "+X points", "effort": "low|medium|high" }
@@ -113,7 +119,7 @@ Return STRICTLY this JSON, no markdown fences, no preamble. Keep each text field
   "actionable_next_steps": ["...", "..."]
 }
 
-Dimensions:
+Dimensions (DELIVERY — how they pitched, score 0-100):
 - opening: hooked in 15s? Name+company+what+for-whom clear?
 - storytelling: narrative arc vs facts? Pulled the listener in?
 - pacing: time per slide, filler words, momentum (call out silent slides + slides that ran long)
@@ -121,7 +127,15 @@ Dimensions:
 - confidence: declarative vs hedging — quote specific weak phrases ("we sort of think...")
 - coverage: did they hit problem / solution / market / team / traction / ask?
 
-ONE per_slide entry for EVERY slide referenced (silent → pace "silent", low score). Score, don't pad.`
+content_dimensions (CONTENT — what they covered, scored like the deck analysis):
+- Score EACH of the 7 dimensions 0-100 based on how well the founder addressed it IN THEIR SPOKEN PITCH (not the deck).
+- "slides": list EVERY slide number where they touched this dimension. If they covered it across multiple slides, include ALL of them. If they never addressed it, use an empty array [] and score it low.
+- "found": concrete things they actually said (transcript-grounded, paraphrase ≤12 words). Empty if absent.
+- "missing": specific concrete items they should have said, phrased as nouns the founder can act on (sector-specific). 
+- "best_practice": actionable, sector-specific guidance starting with a verb — what a strong founder pitching THIS company would say for this dimension. Not generic.
+- Use the PRIMARY METRIC TYPE from the deck analysis — judge against the metrics that matter for THIS company.
+
+Do NOT pad. Be specific and quote the founder. Score strictly — investors are not generous.`
 
   const text = await callGemini(prompt, MAX_TOKENS_CORE)
   return parsePitchDebrief(text)
@@ -243,7 +257,7 @@ function parsePitchDebrief(text: string): Debrief {
     investor_readiness: validReadiness(parsed.investor_readiness),
     summary: String(parsed.summary || '').slice(0, 2000),
     dimensions: validDimensions(parsed.dimensions),
-    per_slide: validSlides(parsed.per_slide),
+    content_dimensions: validContentDimensions(parsed.content_dimensions),
     priority_fixes: validPriorityFixes(parsed.priority_fixes),
     actionable_next_steps: validStrArr(parsed.actionable_next_steps, 8, 500),
   }
@@ -307,23 +321,34 @@ function validDimensions(v: unknown): Record<string, DimensionScore> {
   }
   return out
 }
-function validSlides(v: unknown): SlideBreakdown[] | undefined {
+const CONTENT_DIM_LABELS: Record<string, string> = {
+  traction:       'Traction',
+  problem:        'Problem & opportunity',
+  solution:       'Solution & product',
+  team:           'Team',
+  market_size:    'Market size',
+  business_model: 'Business model',
+  financials:     'Financials & ask',
+}
+function validContentDimensions(v: unknown): ContentDimension[] | undefined {
   if (!Array.isArray(v)) return undefined
   return v.map(raw => {
-    const s = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
-    const paceVal = String(s.pace || 'good')
-    const validPace: SlideBreakdown['pace'] = ['silent', 'too fast', 'good', 'too slow'].includes(paceVal)
-      ? paceVal as SlideBreakdown['pace'] : 'good'
+    const d = (raw && typeof raw === 'object') ? raw as Record<string, unknown> : {}
+    const key = String(d.key || '')
+    const label = CONTENT_DIM_LABELS[key] || String(d.label || key || 'Dimension').slice(0, 60)
+    const slides = Array.isArray(d.slides)
+      ? (d.slides as unknown[]).map(n => clamp(n, 1, 100)).filter((n, i, a) => a.indexOf(n) === i).slice(0, 50)
+      : []
     return {
-      slide:            clamp(s.slide, 1, 50),
-      score:            clamp(s.score, 0, 100),
-      pace:             validPace,
-      what_worked:      validStrArr(s.what_worked, 6, 400),
-      what_to_improve:  validStrArr(s.what_to_improve, 6, 400),
-      best_practice:    String(s.best_practice || '').slice(0, 800),
-      how_to_be_better: String(s.how_to_be_better || '').slice(0, 800),
+      key,
+      label,
+      score:         clamp(d.score, 0, 100),
+      slides,
+      found:         validStrArr(d.found, 8, 400),
+      missing:       validStrArr(d.missing, 8, 400),
+      best_practice: String(d.best_practice || '').slice(0, 800),
     }
-  }).slice(0, 25)
+  }).filter(d => CONTENT_DIM_LABELS[d.key]).slice(0, 7)
 }
 function validQuestions(v: unknown): QuestionBreakdown[] | undefined {
   if (!Array.isArray(v)) return undefined

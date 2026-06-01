@@ -6,11 +6,11 @@ import Link from 'next/link'
 import { RotateCw, MessageSquareMore, Users } from 'lucide-react'
 import { NextActionsBlock, Card } from '@/components/ui'
 import { mockPitchDebriefNextActions } from '@/lib/next-actions'
-import type { Debrief, DimensionScore, SlideBreakdown, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
+import type { Debrief, DimensionScore, SlideBreakdown, ContentDimension, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
 
-type TabId = 'overview' | 'dimensions' | 'slides' | 'questions' | 'other' | 'priorities'
+type TabId = 'overview' | 'dimensions' | 'content' | 'slides' | 'questions' | 'other' | 'priorities'
 
-export default function DebriefView({ sessionId, mode, durationMin, company, companySlug, debrief, startedAt, isGenerating }: {
+export default function DebriefView({ sessionId, mode, durationMin, company, companySlug, debrief, startedAt, isGenerating, status }: {
   sessionId: string
   mode: 'pitch' | 'qa'
   durationMin: number
@@ -19,17 +19,40 @@ export default function DebriefView({ sessionId, mode, durationMin, company, com
   debrief: Debrief | null
   startedAt: string
   isGenerating: boolean
+  status: string
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
-  const [waiting, setWaiting] = useState(isGenerating)
+  const [failed, setFailed] = useState(false)
+  const [retryNonce, setRetryNonce] = useState(0)
 
-  // Poll while debrief is being generated
+  // Ensure a debrief exists. If we arrived fresh on a completed session with no
+  // debrief (e.g. the original generation failed), auto-kick a regeneration —
+  // then poll. On the finish flow (isGenerating) the POST is already in flight,
+  // so we only poll. Gives up after ~3 min and surfaces a Retry button.
   useEffect(() => {
-    if (!isGenerating || debrief) return
+    if (debrief) return
+    if (status !== 'completed') return  // nothing to analyze unless the session finished
     let cancelled = false
-    let elapsed = 0
-    const poll = async () => {
+    setFailed(false)
+
+    const run = async () => {
+      // Kick generation ourselves unless one is already in flight from the finish flow.
+      if (!isGenerating || retryNonce > 0) {
+        try {
+          const res = await fetch('/api/mock-pitch/debrief', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId }),
+          })
+          if (res.ok) {
+            const data = await res.json().catch(() => null)
+            if (!cancelled && data?.debrief) { router.refresh(); return }
+          }
+        } catch {}
+        // Fall through to poll regardless — the route saves on success even if
+        // the response was lost (navigation / function timeout).
+      }
+      let elapsed = 0
       while (!cancelled && elapsed < 180) {  // up to 3 minutes
         await new Promise(r => setTimeout(r, 4000))
         elapsed += 4
@@ -37,21 +60,20 @@ export default function DebriefView({ sessionId, mode, durationMin, company, com
           const res = await fetch(`/api/mock-pitch/sessions/${sessionId}`, { cache: 'no-store' })
           if (!res.ok) continue
           const data = await res.json()
-          if (data.session?.debrief) {
-            router.refresh()
-            setWaiting(false)
-            return
-          }
+          if (data.session?.debrief) { router.refresh(); return }
         } catch {}
       }
+      if (!cancelled) setFailed(true)  // gave up → offer retry instead of an eternal spinner
     }
-    poll()
+    run()
     return () => { cancelled = true }
-  }, [sessionId, isGenerating, debrief, router])
+  }, [sessionId, isGenerating, debrief, router, retryNonce, status])
 
-  // Loading state — no debrief yet
-  if (!debrief || waiting) {
-    return <DebriefLoading />
+  // Loading / failed state — no debrief yet
+  if (!debrief) {
+    return failed
+      ? <DebriefFailed onRetry={() => { setFailed(false); setRetryNonce(n => n + 1) }} />
+      : <DebriefLoading />
   }
 
   const tabs = buildTabs(mode, debrief)
@@ -98,6 +120,7 @@ export default function DebriefView({ sessionId, mode, durationMin, company, com
       <div className="min-h-[300px]">
         {activeTab === 'overview' && <OverviewTab debrief={debrief} mode={mode} />}
         {activeTab === 'dimensions' && <DimensionsTab debrief={debrief} />}
+        {activeTab === 'content' && debrief.content_dimensions && <ContentTab dims={debrief.content_dimensions} />}
         {activeTab === 'slides' && debrief.per_slide && <SlidesTab slides={debrief.per_slide} />}
         {activeTab === 'questions' && debrief.per_question && <QuestionsTab questions={debrief.per_question} />}
         {activeTab === 'other' && debrief.suggested_questions && <OtherTab suggested={debrief.suggested_questions} />}
@@ -123,6 +146,9 @@ function buildTabs(mode: 'pitch' | 'qa', d: Debrief): { id: TabId; label: string
     { id: 'overview', label: '📊 Overview' },
     { id: 'dimensions', label: '📈 Dimensions', count: Object.keys(d.dimensions || {}).length },
   ]
+  if (mode === 'pitch' && d.content_dimensions?.length) {
+    tabs.push({ id: 'content', label: '🎯 Content coverage', count: d.content_dimensions.length })
+  }
   if (mode === 'pitch' && d.per_slide?.length) {
     tabs.push({ id: 'slides', label: '🎞️ Per-slide', count: d.per_slide.length })
   }
@@ -185,6 +211,23 @@ function DebriefLoading() {
         </div>
       </div>
       <p className="text-[11px] text-text-disabled mt-6">This page will update automatically when ready.</p>
+    </div>
+  )
+}
+
+function DebriefFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="max-w-3xl mx-auto py-16 text-center">
+      <div className="text-5xl mb-4">⚠️</div>
+      <h2 className="text-xl font-semibold text-text-primary mb-2">Debrief didn&apos;t finish generating</h2>
+      <p className="text-sm text-text-tertiary max-w-md mx-auto">
+        Your session was saved — but the AI analysis didn&apos;t complete (it can occasionally time out).
+        Your transcript is safe; you can generate the debrief again.
+      </p>
+      <button onClick={onRetry}
+        className="mt-6 inline-flex items-center gap-2 bg-brand hover:bg-brand-hover text-white text-sm font-medium rounded-lg px-4 py-2">
+        <RotateCw className="w-4 h-4" strokeWidth={1.75} /> Regenerate debrief
+      </button>
     </div>
   )
 }
@@ -331,6 +374,58 @@ function DimensionCard({ name, dim }: { name: string; dim: DimensionScore }) {
 }
 
 // ─── Tab: Slides (Pitch) ───────────────────────────────────────────
+function ContentTab({ dims }: { dims: ContentDimension[] }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-text-tertiary">
+        How well you covered each dimension investors score — based on what you actually said in your pitch.
+        These mirror your deck analysis, so you can compare deck vs. spoken pitch.
+      </p>
+      {dims.map((d, i) => <ContentDimCard key={i} dim={d} />)}
+    </div>
+  )
+}
+
+function ContentDimCard({ dim }: { dim: ContentDimension }) {
+  return (
+    <div className="bg-white border border-border rounded-xl p-4">
+      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-text-primary">{dim.label}</span>
+          {dim.slides.length > 0 ? (
+            <span className="text-[10px] text-text-tertiary">
+              {dim.slides.length === 1 ? 'slide' : 'slides'} {dim.slides.join(', ')}
+            </span>
+          ) : (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-warning-bg text-warning-text">not covered</span>
+          )}
+        </div>
+        <div className={`text-xs font-semibold px-2 py-0.5 rounded-full ${scoreBadge(dim.score)}`}>{dim.score} / 100</div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+        {dim.found.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-success-text font-semibold mb-1">✓ What you said</div>
+            <ul className="space-y-0.5">{dim.found.map((s, i) => <li key={i} className="text-xs text-text-secondary">• {s}</li>)}</ul>
+          </div>
+        )}
+        {dim.missing.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-danger-text font-semibold mb-1">⚠ Missing / weak</div>
+            <ul className="space-y-0.5">{dim.missing.map((s, i) => <li key={i} className="text-xs text-text-secondary">• {s}</li>)}</ul>
+          </div>
+        )}
+      </div>
+      {dim.best_practice && (
+        <div className="bg-blue-50 border border-blue-100 rounded-md p-2 mt-2">
+          <div className="text-[10px] uppercase tracking-wide text-blue-900 font-semibold mb-0.5">💡 How to deliver this well</div>
+          <p className="text-xs text-blue-900 leading-relaxed">{dim.best_practice}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SlidesTab({ slides }: { slides: SlideBreakdown[] }) {
   return (
     <div className="space-y-3">

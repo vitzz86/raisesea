@@ -5,7 +5,7 @@
 export type Mode = 'pitch' | 'qa'
 export type SessionStatus = 'in_progress' | 'completed' | 'abandoned'
 
-export const PITCH_DURATIONS = [3, 5, 10] as const
+export const PITCH_DURATIONS = [3, 5] as const
 export const QA_DURATIONS = [5, 10] as const
 
 // Q&A: roughly 2.5 minutes per question → 5min=2q, 10min=4q
@@ -103,6 +103,20 @@ export type PriorityFix = {
   effort: string
 }
 
+// Content-coverage breakdown (Pitch mode) — mirrors the deck-analysis content
+// dimensions (the 8 minus "Narrative & design") so founders see the SAME
+// dimensions across their deck analysis and their spoken pitch. Replaces the
+// old per_slide breakdown (which exploded on long decks).
+export type ContentDimension = {
+  key: string            // 'traction' | 'problem' | 'solution' | 'team' | 'market_size' | 'business_model' | 'financials'
+  label: string          // deck-matching label, e.g. 'Problem & opportunity'
+  score: number          // 0-100 (diagnostic; overall_score still comes from delivery dimensions)
+  slides: number[]       // every slide where the founder addressed this (empty if not covered)
+  found: string[]        // WHAT EXISTS — what they actually said (transcript-grounded)
+  missing: string[]      // what was weak or absent
+  best_practice: string  // how to deliver it well (sector-specific)
+}
+
 // Debrief structure returned by Gemini after the session
 export type Debrief = {
   overall_score: number    // 0-100 (consistent with deck analysis)
@@ -111,7 +125,8 @@ export type Debrief = {
   // Pitch dimensions: Opening, Storytelling, Pacing, Clarity, Confidence, Coverage
   // Q&A dimensions:    Market, Traction, Team, Business model, The ask
   dimensions: Record<string, DimensionScore>
-  per_slide?: SlideBreakdown[]          // Pitch mode
+  content_dimensions?: ContentDimension[]  // Pitch mode (NEW — replaces per_slide)
+  per_slide?: SlideBreakdown[]          // Pitch mode (LEGACY — old debriefs only)
   per_question?: QuestionBreakdown[]    // Q&A mode
   suggested_questions?: SuggestedQuestion[]  // Q&A mode bonus: 5 more likely Qs
   priority_fixes: PriorityFix[]

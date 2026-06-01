@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { supabaseAdmin } from '@/lib/supabase'
-import { generateEditorsTake } from '@/lib/news-pipeline'
+import { generateEditorsTake, generateTopStories } from '@/lib/news-pipeline'
 
 export const maxDuration = 60
 
-// POST /api/admin/news/editors-take — generate a new AI draft
+// POST /api/admin/news/editors-take — generate a new AI draft (take + top stories)
 export async function POST() {
   const user = await getSessionUser()
   if (!user || !(await isSuperAdmin(user))) {
@@ -17,6 +17,10 @@ export async function POST() {
   if (!take) {
     return NextResponse.json({ error: 'Failed to generate — no approved items in last 7 days, or Gemini error' }, { status: 500 })
   }
+
+  // Top stories are part of the same weekly artifact (best-effort: a failure
+  // here shouldn't block the take — it just won't have top stories attached).
+  const topStories = await generateTopStories()
 
   // Compute "week starting" (Monday of this week)
   const now = new Date()
@@ -33,10 +37,11 @@ export async function POST() {
       headline: take.headline,
       body:     take.body,
       takeaway: take.takeaway,
+      top_stories: topStories,
       status: 'pending',
       generated_by: 'ai',
     })
-    .select('id, content, headline, body, takeaway')
+    .select('id, content, headline, body, takeaway, top_stories')
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

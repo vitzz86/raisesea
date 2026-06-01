@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
-import type { Debrief, DimensionScore, SlideBreakdown, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
+import type { Debrief, DimensionScore, SlideBreakdown, ContentDimension, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -84,6 +84,12 @@ function buildHTML(filename: string, company: string, mode: 'pitch' | 'qa', dura
     ${Object.entries(d.dimensions).map(([k, dim]) => dimensionHTML(prettyDim(k), dim)).join('')}
   </section>` : ''}
 
+  ${mode === 'pitch' && d.content_dimensions?.length ? `
+  <section class="page-break-before">
+    <h2>Content coverage</h2>
+    ${d.content_dimensions.map(c => contentDimHTML(c)).join('')}
+  </section>` : ''}
+
   ${mode === 'pitch' && d.per_slide?.length ? `
   <section class="page-break-before">
     <h2>Per-slide breakdown</h2>
@@ -141,6 +147,22 @@ function dimensionHTML(name: string, dim: DimensionScore): string {
     </div>
     ${dim.best_practice ? `<div class="callout callout-blue"><strong>💡 Best practice:</strong> ${esc(dim.best_practice)}</div>` : ''}
     <div class="meta small">${dim.score_impact ? `<span>${esc(dim.score_impact)}</span>` : ''}${dim.fix_effort ? `<span>Effort: <strong>${esc(dim.fix_effort)}</strong></span>` : ''}</div>
+  </div>`
+}
+
+function contentDimHTML(c: ContentDimension): string {
+  const sc = colorFor(c.score)
+  const where = c.slides.length > 0 ? `${c.slides.length === 1 ? 'slide' : 'slides'} ${c.slides.join(', ')}` : 'not covered'
+  return `<div class="card">
+    <div class="card-head">
+      <div class="card-title">${esc(c.label)} <span class="small" style="color:#6B7280">${esc(where)}</span></div>
+      <div class="score-pill" style="background:${sc}20;color:${sc}">${c.score} / 100</div>
+    </div>
+    <div class="two-col">
+      ${c.found.length ? `<div><div class="lbl-ok">✓ What you said</div><ul>${c.found.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '<div></div>'}
+      ${c.missing.length ? `<div><div class="lbl-bad">⚠ Missing / weak</div><ul>${c.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '<div></div>'}
+    </div>
+    ${c.best_practice ? `<div class="callout callout-blue"><strong>💡 How to deliver this well:</strong> ${esc(c.best_practice)}</div>` : ''}
   </div>`
 }
 

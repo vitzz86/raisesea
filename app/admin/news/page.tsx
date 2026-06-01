@@ -36,7 +36,7 @@ export default async function AdminNewsPage({
   // This week's editor's takes
   const { data: takes } = await supabaseAdmin
     .from('editors_takes')
-    .select('id, week_starting, content, headline, takeaway, status, created_at')
+    .select('id, week_starting, content, headline, takeaway, top_stories, status, created_at')
     .order('created_at', { ascending: false })
     .limit(10)
 

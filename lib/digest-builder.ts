@@ -13,7 +13,8 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from './supabase'
-import { sendEmail, wrapEmailHTML } from './resend'
+import { sendEmail, sendEmailBatch, wrapEmailHTML } from './resend'
+import { verifyTake } from './editorial-verify'
 
 type NewsItem = {
   id: string
@@ -38,6 +39,13 @@ type Subscriber = {
   email: string
   full_name: string | null
   news_sectors: string[]
+  last_digest_sent_at?: string | null
+}
+
+// Basic RFC-ish email validation. Resend batch uses STRICT validation — one
+// malformed address fails the entire batch — so we filter before sending.
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
 const MIN_ITEMS_IN_SECTION_1 = 3
@@ -51,12 +59,14 @@ export async function sendWeeklyDigest(opts: {
   triggeredByUserId?: string | null
   dryRun?: boolean   // when true, doesn't send emails, just returns the plan
   returnHtml?: boolean  // when true (with dryRun), also returns rendered sample HTML
+  force?: boolean    // when true, re-send even to subscribers already sent this week
 }): Promise<{
   recipients: number
   items: number
   digest_id: string | null
   preview?: { subscriber_email: string; section1_count: number }[]
   skippedReason?: string
+  alreadySent?: number
   previewHtml?: string
 }> {
   const now = new Date()
@@ -99,13 +109,20 @@ export async function sendWeeklyDigest(opts: {
   }
 
   // ── SAFETY FLOOR (cron auto-send only) ──
-  // Protect subscribers from a thin/empty digest. When the cron triggers the
-  // weekly auto-send, require at least 3 approved items AND an editor's take.
-  // Manual admin sends bypass this (admin is deliberately choosing to send).
+  // Protect subscribers from a thin/empty/broken digest. When the cron triggers
+  // the weekly auto-send, require at least 3 approved items AND a complete
+  // editor's take. Manual admin sends bypass this (admin deliberately chose to).
   const MIN_ITEMS_FOR_AUTOSEND = 3
   if (opts.triggeredBy === 'cron' && !opts.dryRun) {
-    if (allItems.length < MIN_ITEMS_FOR_AUTOSEND || !editorsTake) {
-      console.warn(`[digest] SAFETY FLOOR: auto-send skipped — only ${allItems.length} approved item(s)${editorsTake ? '' : ', no editor\u2019s take'}. Need ${MIN_ITEMS_FOR_AUTOSEND}+ items + a take. Notifying admin instead.`)
+    // Lenient take check: presence + minimum length only (won't false-positive
+    // on a legit take that happens to end on a number/URL).
+    const takeCheck = verifyTake(
+      { headline: takeHeadline, body: takeBody, takeaway: takeTakeaway, content: editorsTake },
+      { strict: false },
+    )
+    if (allItems.length < MIN_ITEMS_FOR_AUTOSEND || !editorsTake || !takeCheck.ok) {
+      const takeNote = !editorsTake ? ', no editor\u2019s take' : (!takeCheck.ok ? `, take incomplete (${takeCheck.issues.join('; ')})` : '')
+      console.warn(`[digest] SAFETY FLOOR: auto-send skipped — only ${allItems.length} approved item(s)${takeNote}. Need ${MIN_ITEMS_FOR_AUTOSEND}+ items + a complete take. Notifying admin instead.`)
       await notifyAdminDigestSkipped(allItems.length, !!editorsTake)
       return { recipients: 0, items: allItems.length, digest_id: null, skippedReason: 'safety_floor' }
     }
@@ -114,12 +131,13 @@ export async function sendWeeklyDigest(opts: {
   // Load all subscribers (founders + experts, email_digest_enabled=true)
   const { data: subs } = await supabaseAdmin
     .from('user_profiles')
-    .select('id, email, full_name, news_sectors')
+    .select('id, email, full_name, news_sectors, last_digest_sent_at')
     .eq('email_digest_enabled', true)
 
-  const subscribers = (subs || []).filter(s => s.email) as Subscriber[]
+  // Keep only deliverable addresses (batch validation is strict — see isValidEmail)
+  const subscribers = (subs || []).filter(s => s.email && isValidEmail(s.email)) as Subscriber[]
   if (subscribers.length === 0) {
-    console.log('[digest] no active subscribers — skipping send')
+    console.log('[digest] no active subscribers with valid email — skipping send')
     return { recipients: 0, items: 0, digest_id: null }
   }
 
@@ -142,14 +160,10 @@ export async function sendWeeklyDigest(opts: {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const weekLabel = `Week of ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
 
-  // ─── Send to each subscriber ──────────────────────────────────
-  const preview: { subscriber_email: string; section1_count: number }[] = []
-  let sentCount = 0
-  let previewHtml: string | undefined
-  for (const sub of subscribers) {
-    // Section 1: personalized fundraising
+  // ─── Render one subscriber's email (personalized Section 1) ───
+  const subject = `Weekly SEA Fundraising Digest - ${weekLabel}`
+  const renderForSub = (sub: Subscriber): { html: string; text: string; section1Count: number } => {
     let section1 = allFundraising.filter(i => i.sector && sub.news_sectors.includes(i.sector))
-
     // Smart fallback (Option C): if fewer than MIN_ITEMS_IN_SECTION_1, fill from rest
     if (section1.length < MIN_ITEMS_IN_SECTION_1) {
       const used = new Set(section1.map(i => i.id))
@@ -161,10 +175,8 @@ export async function sendWeeklyDigest(opts: {
     const usedSectorFilter = sub.news_sectors.length > 0
     const lightWeekNote = usedSectorFilter && section1.filter(i => sub.news_sectors.includes(i.sector || '')).length < 2
 
-    preview.push({ subscriber_email: sub.email, section1_count: section1.length })
-
     const html = wrapEmailHTML({
-      title: `Weekly SEA Fundraising Digest - ${weekLabel}`,
+      title: subject,
       body: buildDigestBody({
         firstName: sub.full_name?.split(' ')[0] || null,
         weekLabel,
@@ -180,33 +192,72 @@ export async function sendWeeklyDigest(opts: {
       footer: `You're getting this because you signed up for RaiseSEA. ${sub.news_sectors.length > 0 ? 'Section 1 is personalized for your sectors: ' + sub.news_sectors.join(', ') + '.' : 'Pick sectors in your settings to personalize.'}`,
       unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?u=${sub.id}`,
     })
-
-    // Capture the first rendered email as the preview sample
-    if (!previewHtml) previewHtml = html
-
-    if (opts.dryRun) continue
-
     const text = buildDigestText({ firstName: sub.full_name?.split(' ')[0] || null, section1, techItems, policyItems, exitItems, baseUrl })
-
-    const { ok } = await sendEmail({
-      to:      sub.email,
-      subject: `Weekly SEA Fundraising Digest - ${weekLabel}`,
-      html,
-      text,
-      tags:    [{ name: 'category', value: 'weekly_digest' }],
-    })
-    if (ok) {
-      sentCount++
-      await supabaseAdmin
-        .from('user_profiles')
-        .update({ last_digest_sent_at: now.toISOString() })
-        .eq('id', sub.id)
-    }
+    return { html, text, section1Count: section1.length }
   }
 
+  // ─── Dry run: render only, send nothing ───────────────────────
   if (opts.dryRun) {
+    const preview: { subscriber_email: string; section1_count: number }[] = []
+    let previewHtml: string | undefined
+    for (const sub of subscribers) {
+      const { html, section1Count } = renderForSub(sub)
+      preview.push({ subscriber_email: sub.email, section1_count: section1Count })
+      if (!previewHtml) previewHtml = html
+    }
     return { recipients: subscribers.length, items: allItems.length, digest_id: null, preview, previewHtml }
   }
+
+  // ─── Idempotency / resume guard ───────────────────────────────
+  // Skip anyone already sent THIS week's digest, so a re-run (timeout, retry,
+  // double-click) resumes instead of double-emailing. `force` overrides it.
+  const weekStart = new Date(now)
+  weekStart.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
+  weekStart.setUTCHours(0, 0, 0, 0)
+  const weekStartIso = weekStart.toISOString()
+  const weekKey = weekStartIso.slice(0, 10)
+
+  const toSend = opts.force
+    ? subscribers
+    : subscribers.filter(s => !s.last_digest_sent_at || s.last_digest_sent_at < weekStartIso)
+  const alreadySent = subscribers.length - toSend.length
+
+  if (toSend.length === 0) {
+    console.log(`[digest] all ${subscribers.length} subscribers already received this week's digest — nothing to send`)
+    return { recipients: 0, items: allItems.length, digest_id: null, alreadySent, skippedReason: 'already_sent_this_week' }
+  }
+
+  // ─── Batch send (chunks of 100) with per-chunk commit ─────────
+  const CHUNK = 100
+  let sentCount = 0
+  const sentNowIso = now.toISOString()
+
+  for (let i = 0; i < toSend.length; i += CHUNK) {
+    const chunk = toSend.slice(i, i + CHUNK)
+    const chunkIndex = i / CHUNK
+    const payloads = chunk.map(sub => {
+      const { html, text } = renderForSub(sub)
+      return { to: sub.email, subject, html, text, tags: [{ name: 'category', value: 'weekly_digest' }] }
+    })
+
+    const res = await sendEmailBatch(payloads, { idempotencyKey: `digest-${weekKey}-c${chunkIndex}` })
+
+    if (res.ok) {
+      sentCount += chunk.length
+      // Mark this chunk sent immediately, so a later failure/retry doesn't re-send it.
+      await supabaseAdmin
+        .from('user_profiles')
+        .update({ last_digest_sent_at: sentNowIso })
+        .in('id', chunk.map(s => s.id))
+    } else {
+      // Leave this chunk unmarked → a future run will retry exactly these subscribers.
+      console.error(`[digest] batch chunk ${chunkIndex} failed (${chunk.length} recipients): ${res.error}`)
+    }
+
+    // Pace between chunks to stay under Resend's 2 req/s (only matters past 100 subs).
+    if (i + CHUNK < toSend.length) await new Promise(r => setTimeout(r, 600))
+  }
+  if (alreadySent > 0) console.log(`[digest] skipped ${alreadySent} already-sent subscriber(s) this week`)
 
   // ─── Record audit log + mark items as included ──────────────
   const { data: digest } = await supabaseAdmin
@@ -230,8 +281,8 @@ export async function sendWeeklyDigest(opts: {
       .in('id', allItems.map(i => i.id))
   }
 
-  console.log(`[digest] sent to ${sentCount}/${subscribers.length} subscribers, ${allItems.length} items`)
-  return { recipients: sentCount, items: allItems.length, digest_id: digest?.id || null }
+  console.log(`[digest] sent to ${sentCount}/${toSend.length} targeted subscribers (${alreadySent} already sent this week), ${allItems.length} items`)
+  return { recipients: sentCount, items: allItems.length, digest_id: digest?.id || null, alreadySent }
 }
 
 // ─── Email body templates (inline styles only for Gmail compat) ──

@@ -11,13 +11,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let body: { dryRun?: boolean }
+  let body: { dryRun?: boolean; force?: boolean }
   try { body = await req.json() } catch { body = {} }
 
   const result = await sendWeeklyDigest({
     triggeredBy: 'manual_admin',
     triggeredByUserId: user.id,
     dryRun: !!body.dryRun,
+    force: !!body.force,
   })
   return NextResponse.json({ ok: true, ...result })
 }

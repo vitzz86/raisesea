@@ -6,6 +6,7 @@ import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import DashboardShell from '@/components/DashboardShell'
 import NewsFeed from './NewsFeed'
+import { legacyTopStories, type StoryItem, type CategorizedTopStories } from '@/lib/news-clustering'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,10 +38,10 @@ export default async function NewsPage({
     .order('published_at', { ascending: false })
     .limit(300)
 
-  // Editor's take (most recent approved) — structured
+  // Editor's take (most recent approved) — structured, with categorized top stories
   const { data: takes } = await supabaseAdmin
     .from('editors_takes')
-    .select('content, headline, body, takeaway, approved_at')
+    .select('content, headline, body, takeaway, top_stories, approved_at')
     .eq('status', 'approved')
     .order('approved_at', { ascending: false })
     .limit(1)
@@ -60,6 +61,10 @@ export default async function NewsPage({
     editorsTake = { headline: t.headline || null, body: body || null, takeaway: t.takeaway || null }
   }
 
+  // Categorized AI top stories ride on the approved take. If present, they win;
+  // otherwise we fall back to the live heuristic top-5 (legacyTopStories) below.
+  const categorizedTopStories = (t?.top_stories as CategorizedTopStories | null | undefined) || null
+
   // Compute trending stats (last 7 days)
   const recentItems = (items || [])
   const trending = computeTrending(recentItems)
@@ -67,8 +72,10 @@ export default async function NewsPage({
   // "This week at a glance" summaries
   const glance = computeGlance(recentItems)
 
-  // Group similar stories (same news, different sources) + find the most-covered
-  const { topStories } = clusterStories(items || [])
+  // Live heuristic fallback (mixed top-5) — used only when the approved take
+  // has no AI top stories yet.
+  const hasCategorized = !!categorizedTopStories && Object.values(categorizedTopStories).some(Boolean)
+  const topStories = hasCategorized ? [] : legacyTopStories((items || []) as StoryItem[])
 
   // Compute the date range for the header
   const rangeStart = new Date(Date.now() - 7 * 86400 * 1000)
@@ -84,6 +91,7 @@ export default async function NewsPage({
         editorsTake={editorsTake}
         trending={trending}
         topStories={topStories}
+        categorizedTopStories={hasCategorized ? categorizedTopStories : null}
         glance={glance}
         dateRange={dateRange}
         weekStats={{
@@ -124,85 +132,6 @@ function computeGlance(items: GlanceItem[]) {
     category: byCategory.length > 0 ? `By type: ${byCategory.map(([k, c]) => `${catLabel[k] || k} (${c})`).join(', ')}.` : '',
     industry: bySector.length   > 0 ? `Hottest sectors: ${topN(bySector, 3)}.` : '',
   }
-}
-
-// ─── Story clustering via fuzzy title similarity ───────────────────
-// Groups items reporting the SAME story from different sources, then ranks
-// by coverage (more sources = more important) for a "Top stories" list.
-
-function tokenize(s: string): Set<string> {
-  const stop = new Set(['the','a','an','to','of','in','on','for','and','or','with','at','by','from','as','is','its','it','this','that','raises','raise','startup','million','funding'])
-  return new Set(
-    s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
-      .filter(w => w.length > 2 && !stop.has(w))
-  )
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0
-  let inter = 0
-  for (const w of a) if (b.has(w)) inter++
-  return inter / (a.size + b.size - inter)
-}
-
-type StoryItem = {
-  id: string; title: string; company_name: string | null; amount_usd: number | null
-  stage: string | null; sector: string | null; country: string | null
-  source_url: string; source_name: string | null; published_at: string | null
-  category: string; region_scope?: string | null
-}
-
-function clusterStories(items: StoryItem[]) {
-  const clusters: { items: StoryItem[]; tokens: Set<string> }[] = []
-  for (const item of items) {
-    const tokens = tokenize(item.company_name ? `${item.company_name} ${item.title}` : item.title)
-    // Match against existing cluster if title similarity OR same company name
-    let placed = false
-    for (const c of clusters) {
-      const sim = jaccard(tokens, c.tokens)
-      const sameCompany = item.company_name && c.items.some(ci => ci.company_name && ci.company_name.toLowerCase() === item.company_name!.toLowerCase())
-      if (sim >= 0.45 || sameCompany) {
-        c.items.push(item)
-        for (const t of tokens) c.tokens.add(t)
-        placed = true
-        break
-      }
-    }
-    if (!placed) clusters.push({ items: [item], tokens })
-  }
-
-  // Top stories: rank by (source count desc, then amount desc, then recency)
-  const ranked = clusters
-    .map(c => {
-      const sorted = [...c.items].sort((a, b) => (b.amount_usd || 0) - (a.amount_usd || 0))
-      const primary = sorted[0]
-      const sources = c.items
-        .map(i => ({ name: i.source_name || 'source', url: i.source_url }))
-        .filter((s, idx, arr) => arr.findIndex(x => x.url === s.url) === idx)  // dedupe by url
-      return { primary, sources, coverage: sources.length }
-    })
-    .sort((a, b) => {
-      if (b.coverage !== a.coverage) return b.coverage - a.coverage
-      if ((b.primary.amount_usd || 0) !== (a.primary.amount_usd || 0)) return (b.primary.amount_usd || 0) - (a.primary.amount_usd || 0)
-      return (b.primary.published_at || '').localeCompare(a.primary.published_at || '')
-    })
-
-  // Top 5 stories that have meaningful signal (multi-source OR a notable raise)
-  const topStories = ranked
-    .filter(s => s.coverage >= 2 || (s.primary.amount_usd || 0) >= 5_000_000)
-    .slice(0, 5)
-    .map(s => ({
-      id: s.primary.id,
-      headline: s.primary.company_name
-        ? `${s.primary.company_name}${s.primary.amount_usd ? ' raised $' + (s.primary.amount_usd / 1e6).toFixed(1) + 'M' : ''}`
-        : s.primary.title,
-      sector: s.primary.sector,
-      country: s.primary.country,
-      coverage: s.coverage,
-      sources: s.sources,
-    }))
-
-  return { topStories }
 }
 
 function computeTrending(items: { sector: string | null; lead_investor: string | null }[]) {
