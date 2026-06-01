@@ -15,6 +15,7 @@
 import { supabaseAdmin } from './supabase'
 import { sendEmail, sendEmailBatch, wrapEmailHTML } from './resend'
 import { verifyTake } from './editorial-verify'
+import { TOP_STORY_CATEGORIES, type CategorizedTopStories } from './news-clustering'
 
 type NewsItem = {
   id: string
@@ -90,7 +91,7 @@ export async function sendWeeklyDigest(opts: {
   // Load this week's approved editor's take (most recent) — structured
   const { data: takes } = await supabaseAdmin
     .from('editors_takes')
-    .select('content, headline, body, takeaway')
+    .select('content, headline, body, takeaway, top_stories')
     .eq('status', 'approved')
     .order('created_at', { ascending: false })
     .limit(1)
@@ -98,6 +99,9 @@ export async function sendWeeklyDigest(opts: {
   const editorsTake = t0?.content || null
   const takeHeadline = t0?.headline || null
   const takeTakeaway = t0?.takeaway || null
+  // Categorized AI top stories attached to the approved take (same artifact the
+  // /news page renders). Null for old takes / quiet weeks → legacy list is used.
+  const takeTopStories = (t0?.top_stories as CategorizedTopStories | null) || null
   // Prefer the clean `body` column; fall back to deriving it from `content`
   // for OLD takes (strip the duplicated headline + takeaway).
   let takeBody = t0?.body || null
@@ -183,6 +187,7 @@ export async function sendWeeklyDigest(opts: {
         editorsTake,
         takeHeadline, takeBody, takeTakeaway,
         topStories: emailTopStories,
+        categorizedTopStories: takeTopStories,
         totalApproved: allItems.length,
         section1, techItems, policyItems, exitItems,
         sectors: sub.news_sectors,
@@ -287,6 +292,52 @@ export async function sendWeeklyDigest(opts: {
 
 // ─── Email body templates (inline styles only for Gmail compat) ──
 
+const TOP_STORY_EMAIL_META: Record<string, { emoji: string; label: string }> = {
+  fundraising: { emoji: '💰', label: 'Fundraising' },
+  tech:        { emoji: '⚡', label: 'Tech' },
+  policy:      { emoji: '🏛', label: 'Policy' },
+  exit:        { emoji: '🚪', label: 'Exit' },
+}
+
+// New: the categorized AI top stories (one per category), matching /news.
+function renderCategorizedTopStoriesEmail(stories: CategorizedTopStories): string {
+  const cats = TOP_STORY_CATEGORIES.filter(c => stories[c])
+  if (cats.length === 0) return ''
+  const rows = cats.map((c, idx) => {
+    const s = stories[c]!
+    const meta = TOP_STORY_EMAIL_META[c]
+    const sub = [s.country, s.sector, s.coverage >= 2 ? `${s.coverage} sources` : null].filter(Boolean).join(' · ')
+    const sources = (s.sources || []).slice(0, 5)
+      .map(src => `<a href="${src.url}" style="color:#1a4d2e;text-decoration:none;margin-right:8px;">${escapeHTML(src.name)} ↗</a>`).join('')
+    return `<div style="padding:8px 0;${idx < cats.length - 1 ? 'border-bottom:1px solid #f3e9d6;' : ''}">
+      <div style="font-size:11px;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">${meta.emoji} ${meta.label}</div>
+      <div style="font-size:13px;font-weight:600;color:#1a1a1a;">${escapeHTML(s.headline)}</div>
+      ${s.why ? `<div style="font-size:12px;color:#555;line-height:1.5;margin-top:2px;">${escapeHTML(s.why)}</div>` : ''}
+      ${sub ? `<div style="font-size:11px;color:#888;margin-top:2px;">${escapeHTML(sub)}</div>` : ''}
+      ${sources ? `<div style="font-size:11px;margin-top:3px;">${sources}</div>` : ''}
+    </div>`
+  }).join('')
+  return `<div style="background:#fff8ed;border:1px solid #fde2b8;border-radius:10px;padding:16px 18px;margin:16px 0;">
+  <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:10px;">🔥 Top stories this week <span style="font-weight:400;color:#999;font-size:11px;">most important per category</span></div>
+  ${rows}
+</div>`
+}
+
+// Legacy fallback: the old mixed "most covered across sources" top-5 list.
+function renderLegacyTopStoriesEmail(
+  topStories: { headline: string; sector: string | null; country: string | null; coverage: number; sources: { name: string; url: string }[] }[],
+): string {
+  return `<div style="background:#fff8ed;border:1px solid #fde2b8;border-radius:10px;padding:16px 18px;margin:16px 0;">
+  <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:10px;">🔥 Top stories this week <span style="font-weight:400;color:#999;font-size:11px;">most covered across sources</span></div>
+  ${topStories.map((s, idx) => `
+    <div style="padding:6px 0;${idx < topStories.length - 1 ? 'border-bottom:1px solid #f3e9d6;' : ''}">
+      <div style="font-size:13px;font-weight:600;color:#1a1a1a;">${idx + 1}. ${escapeHTML(s.headline)}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px;">${[s.country, s.sector, s.coverage >= 2 ? s.coverage + ' sources' : null].filter(Boolean).join(' · ')}</div>
+      <div style="font-size:11px;margin-top:3px;">${s.sources.slice(0, 5).map(src => `<a href="${src.url}" style="color:#1a4d2e;text-decoration:none;margin-right:8px;">${escapeHTML(src.name)} ↗</a>`).join('')}</div>
+    </div>`).join('')}
+</div>`
+}
+
 function buildDigestBody(opts: {
   firstName: string | null
   weekLabel: string
@@ -295,6 +346,7 @@ function buildDigestBody(opts: {
   takeBody: string | null
   takeTakeaway: string | null
   topStories: { headline: string; sector: string | null; country: string | null; coverage: number; sources: { name: string; url: string }[] }[]
+  categorizedTopStories: CategorizedTopStories | null
   totalApproved: number
   section1: NewsItem[]
   techItems: NewsItem[]
@@ -327,6 +379,13 @@ function buildDigestBody(opts: {
   const shownCount = opts.section1.length + opts.techItems.length + opts.policyItems.length + opts.exitItems.length
   const moreCount = Math.max(0, opts.totalApproved - shownCount)
   const structuredTake = opts.takeHeadline || opts.takeBody
+  // Top stories: prefer the categorized AI block (matches /news). Fall back to
+  // the legacy "most covered" list only when the take has no categorized stories.
+  const cat = opts.categorizedTopStories
+  const hasCategorized = !!cat && TOP_STORY_CATEGORIES.some(c => cat[c])
+  const topStoriesHtml = hasCategorized
+    ? renderCategorizedTopStoriesEmail(cat!)
+    : (opts.topStories.length > 0 ? renderLegacyTopStoriesEmail(opts.topStories) : '')
   return `
 <h1 style="font-size:20px;color:#1a1a1a;margin:0 0 4px 0;">Weekly SEA Fundraising Digest</h1>
 <div style="font-size:13px;color:#666;margin-bottom:20px;">${opts.weekLabel}</div>
@@ -343,16 +402,7 @@ ${structuredTake ? `
 
 ${opts.lightWeekNote ? `<div style="font-size:12px;color:#888;font-style:italic;margin-bottom:12px;">Light week in your sectors — including notable deals from adjacent sectors.</div>` : ''}
 
-${opts.topStories.length > 0 ? `
-<div style="background:#fff8ed;border:1px solid #fde2b8;border-radius:10px;padding:16px 18px;margin:16px 0;">
-  <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:10px;">🔥 Top stories this week <span style="font-weight:400;color:#999;font-size:11px;">most covered across sources</span></div>
-  ${opts.topStories.map((s, idx) => `
-    <div style="padding:6px 0;${idx < opts.topStories.length - 1 ? 'border-bottom:1px solid #f3e9d6;' : ''}">
-      <div style="font-size:13px;font-weight:600;color:#1a1a1a;">${idx + 1}. ${escapeHTML(s.headline)}</div>
-      <div style="font-size:11px;color:#888;margin-top:2px;">${[s.country, s.sector, s.coverage >= 2 ? s.coverage + ' sources' : null].filter(Boolean).join(' · ')}</div>
-      <div style="font-size:11px;margin-top:3px;">${s.sources.slice(0, 5).map(src => `<a href="${src.url}" style="color:#1a4d2e;text-decoration:none;margin-right:8px;">${escapeHTML(src.name)} ↗</a>`).join('')}</div>
-    </div>`).join('')}
-</div>` : ''}
+${topStoriesHtml}
 
 ${renderSection('Fundraising' + (opts.sectors.length > 0 ? ' — your sectors' : ''), opts.section1)}
 ${renderSection('Tech & product', opts.techItems)}
