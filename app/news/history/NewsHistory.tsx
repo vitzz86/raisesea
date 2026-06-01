@@ -45,28 +45,64 @@ const SECTOR_COLORS: Record<string, string> = {
   'Crypto/Web3': 'bg-yellow-100 text-yellow-800',
 }
 
+// Token-AND search across the meaningful text fields (see NewsFeed for rationale).
+function matchesQuery(item: Item, tokens: string[]): boolean {
+  if (tokens.length === 0) return true
+  const hay = [
+    item.title, item.company_name, item.ai_summary, item.ai_why_it_matters,
+    item.sector, item.country, item.lead_investor, item.source_name,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return tokens.every(t => hay.includes(t))
+}
+
+function searchRank(item: Item, tokens: string[]): number {
+  const strong = `${item.company_name || ''} ${item.title || ''}`.toLowerCase()
+  let score = 0
+  for (const t of tokens) if (strong.includes(t)) score++
+  return score
+}
+
 export default function NewsHistory({ items }: { items: Item[] }) {
   const weeks = useMemo(buildWeeks, [])
   const [weekKey, setWeekKey] = useState('w1')  // default: last week (history)
+  const [query, setQuery] = useState('')
   const [region, setRegion] = useState('all')
   const [country, setCountry] = useState('all')
   const [category, setCategory] = useState('all')
   const [sector, setSector] = useState('all')
+
+  const tokens = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query])
+  const searching = tokens.length > 0
 
   const allCountries = useMemo(() => Array.from(new Set(items.map(i => i.country).filter((c): c is string => !!c))).sort(), [items])
   const allSectors = useMemo(() => Array.from(new Set(items.map(i => i.sector).filter((s): s is string => !!s))).sort(), [items])
 
   const activeWeek = weeks.find(w => w.key === weekKey) || weeks[1]
 
-  const filtered = useMemo(() => items.filter(i => {
-    const ms = i.published_at ? new Date(i.published_at).getTime() : 0
-    if (ms < activeWeek.startMs || ms >= activeWeek.endMs) return false
-    if (region !== 'all' && (i.region_scope || 'sea') !== region) return false
-    if (country !== 'all' && i.country !== country) return false
-    if (category !== 'all' && i.category !== category) return false
-    if (sector !== 'all' && i.sector !== sector) return false
-    return true
-  }), [items, activeWeek, region, country, category, sector])
+  // While searching we span ALL loaded weeks (28d). Otherwise scope to the
+  // selected week. Dropdowns always apply.
+  const filtered = useMemo(() => {
+    const list = items.filter(i => {
+      if (!searching) {
+        const ms = i.published_at ? new Date(i.published_at).getTime() : 0
+        if (ms < activeWeek.startMs || ms >= activeWeek.endMs) return false
+      }
+      if (region !== 'all' && (i.region_scope || 'sea') !== region) return false
+      if (country !== 'all' && i.country !== country) return false
+      if (category !== 'all' && i.category !== category) return false
+      if (sector !== 'all' && i.sector !== sector) return false
+      if (!matchesQuery(i, tokens)) return false
+      return true
+    })
+    if (searching) {
+      list.sort((a, b) => {
+        const r = searchRank(b, tokens) - searchRank(a, tokens)
+        if (r !== 0) return r
+        return (b.published_at || '').localeCompare(a.published_at || '')
+      })
+    }
+    return list
+  }, [items, activeWeek, region, country, category, sector, tokens, searching])
 
   return (
     <div className="max-w-4xl">
@@ -79,7 +115,7 @@ export default function NewsHistory({ items }: { items: Item[] }) {
       </div>
 
       {/* Week selector */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
+      <div className={`flex flex-wrap items-center gap-1.5 mb-4 transition-opacity ${searching ? 'opacity-40 pointer-events-none' : ''}`}>
         {weeks.map(w => (
           <button key={w.key} onClick={() => setWeekKey(w.key)}
             className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
@@ -88,23 +124,47 @@ export default function NewsHistory({ items }: { items: Item[] }) {
             {w.label}
           </button>
         ))}
+        {searching && <span className="text-[11px] text-gray-500 ml-1">searching all weeks</span>}
       </div>
 
       {/* Filters */}
       <div className="bg-white border border-border rounded-xl p-4 mb-5">
+        {/* Search spans all 4 loaded weeks */}
+        <div className="relative mb-2">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+            placeholder="Search all 4 weeks — company, investor, sector…"
+            className="w-full text-xs border border-border-strong rounded-md pl-8 pr-8 py-2 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition-colors"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">✕</button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Sel label="Region" value={region} onChange={setRegion} options={[['all', 'All regions'], ['sea', '🌏 SEA'], ['global', 'Global']]} />
           <Sel label="Country" value={country} onChange={setCountry} options={[['all', 'All countries'], ...allCountries.map(c => [c, c] as [string, string])]} />
           <Sel label="Category" value={category} onChange={setCategory} options={[['all', 'All types'], ['fundraising', 'Fundraising'], ['tech', 'Tech'], ['policy', 'Policy'], ['exit', 'Exit']]} />
           <Sel label="Sector" value={sector} onChange={setSector} options={[['all', 'All sectors'], ...allSectors.map(s => [s, s] as [string, string])]} />
         </div>
-        <div className="text-[11px] text-gray-500 mt-2">{filtered.length} stor{filtered.length === 1 ? 'y' : 'ies'} in {activeWeek.label.split(' · ')[0].toLowerCase()}</div>
+        <div className="text-[11px] text-gray-500 mt-2">
+          {searching
+            ? `${filtered.length} result${filtered.length === 1 ? '' : 's'} for “${query.trim()}” across the last 4 weeks`
+            : `${filtered.length} stor${filtered.length === 1 ? 'y' : 'ies'} in ${activeWeek.label.split(' · ')[0].toLowerCase()}`}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <div className="bg-white border border-border rounded-xl p-8 text-center">
           <div className="text-3xl opacity-30 mb-2">🗓</div>
-          <p className="text-sm text-text-tertiary">Nothing in this week matches your filters. Try clearing some.</p>
+          <p className="text-sm text-text-tertiary">
+            {searching
+              ? <>No stories match “{query.trim()}” in the last 4 weeks. <button onClick={() => setQuery('')} className="text-[#1a4d2e] underline">Clear search</button>.</>
+              : 'Nothing in this week matches your filters. Try clearing some.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

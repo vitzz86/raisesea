@@ -49,6 +49,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     return NextResponse.json({ error: 'Calendar not connected — reconnect first' }, { status: 400 })
   }
 
+  // The expert's declared timezone (from their availability windows) is the
+  // canonical zone for the calendar event + confirmation email — not a hardcode.
+  const { data: avail } = await supabaseAdmin
+    .from('vc_availability')
+    .select('timezone')
+    .eq('vc_profile_id', mr.vc_profile_id)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle()
+  const expertTz = avail?.timezone || 'Asia/Singapore'
+
   // Validate chosen_slot was one of the 3 proposals
   const proposals = [mr.preferred_slot_1, mr.preferred_slot_2, mr.preferred_slot_3].filter(Boolean) as string[]
   const chosenNormalized = new Date(body.chosen_slot).toISOString()
@@ -99,7 +110,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     description,
     founderEmail,
     vcEmail:      user.email || '',
-    timezone:     'Asia/Singapore',
+    timezone:     expertTz,
   })
 
   if (!event) {
@@ -130,6 +141,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const formattedTime = new Date(startISO).toLocaleString('en-US', {
       weekday: 'long', month: 'long', day: 'numeric',
       hour: 'numeric', minute: '2-digit', hour12: true,
+      timeZone: expertTz,
       timeZoneName: 'short',
     })
     const emailBody = `

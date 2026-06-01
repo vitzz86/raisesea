@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import DashboardShell from '@/components/DashboardShell'
+import LocalTime from '@/components/LocalTime'
 
 export const dynamic = 'force-dynamic'
 
@@ -160,13 +161,6 @@ function VcSnippet({ vc }: { vc: VcMini | undefined }) {
   )
 }
 
-function fmtSlot(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  })
-}
-
 function ConfirmedRow({ request, vc, submission }: { request: MeetingRow; vc: VcMini | undefined; submission: SubMini | undefined }) {
   return (
     <div className="bg-white border border-success-border rounded-xl p-4">
@@ -175,7 +169,7 @@ function ConfirmedRow({ request, vc, submission }: { request: MeetingRow; vc: Vc
         <span className="text-[10px] uppercase bg-green-100 text-success-text px-1.5 py-0.5 rounded">Confirmed</span>
       </div>
       <div className="mt-2 text-sm text-text-secondary">
-        <strong>{request.confirmed_slot ? fmtSlot(request.confirmed_slot) : '—'}</strong>
+        <strong>{request.confirmed_slot ? <LocalTime iso={request.confirmed_slot} /> : '—'}</strong>
         {submission && <> · for <Link href={`/match/${submission.unique_slug}`} className="text-brand underline">{submission.company_name}</Link></>}
       </div>
       <div className="text-xs text-text-tertiary mt-1">{GOAL_LABELS[request.meeting_goal] || request.meeting_goal}</div>
@@ -201,11 +195,11 @@ function PendingRow({ request, vc, submission }: { request: MeetingRow; vc: VcMi
       {submission && <div className="text-xs text-text-tertiary">For: <Link href={`/match/${submission.unique_slug}`} className="text-brand underline">{submission.company_name}</Link></div>}
       <div className="mt-2 text-xs text-text-tertiary">Proposed slots:</div>
       <ul className="text-xs text-text-secondary mt-0.5 space-y-0.5">
-        {slots.map(s => <li key={s}>• {fmtSlot(s)}</li>)}
+        {slots.map(s => <li key={s}>• <LocalTime iso={s} /></li>)}
       </ul>
       {request.soft_hold_expires_at && (
         <div className="text-[10px] text-text-disabled mt-2">
-          Auto-expires {fmtSlot(request.soft_hold_expires_at)}
+          Auto-expires <LocalTime iso={request.soft_hold_expires_at} />
         </div>
       )}
     </div>

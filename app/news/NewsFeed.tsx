@@ -74,12 +74,37 @@ function fmtUSD(n: number): string {
   return `$${n}`
 }
 
+// ── Search: token-AND match across the meaningful text fields ──
+// Every whitespace-separated token must appear somewhere (case-insensitive),
+// so "gojek series a" narrows correctly rather than matching the literal phrase.
+function matchesQuery(item: Item, tokens: string[]): boolean {
+  if (tokens.length === 0) return true
+  const hay = [
+    item.title, item.company_name, item.ai_summary, item.ai_why_it_matters,
+    item.sector, item.country, item.lead_investor, item.source_name,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return tokens.every(t => hay.includes(t))
+}
+
+// Relevance nudge: hits in the headline/company outrank body-only mentions,
+// so an exact company match isn't buried under a paragraph that name-drops it.
+function searchRank(item: Item, tokens: string[]): number {
+  const strong = `${item.company_name || ''} ${item.title || ''}`.toLowerCase()
+  let score = 0
+  for (const t of tokens) if (strong.includes(t)) score++
+  return score
+}
+
 export default function NewsFeed({ items, userSectors, editorsTake, trending, topStories, glance, dateRange, weekStats }: Props) {
   // Filters
+  const [query, setQuery]       = useState<string>('')
   const [region, setRegion]     = useState<'all' | 'sea' | 'global'>('all')
   const [country, setCountry]   = useState<string>('all')
   const [category, setCategory] = useState<string>('all')
   const [sector, setSector]     = useState<string>('all')
+
+  const tokens    = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query])
+  const searching = tokens.length > 0
 
   // Distinct filter values from items
   const allSectors   = useMemo(() => Array.from(new Set(items.map(i => i.sector).filter((s): s is string => !!s))).sort(), [items])
@@ -93,14 +118,26 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
   const countryValid = country === 'all' || allCountries.includes(country)
   const effectiveCountry = countryValid ? country : 'all'
 
-  // Apply filters (AND logic)
+  // Apply filters (AND logic) — search runs alongside the dropdowns
   const filtered = useMemo(() => items.filter(i => {
     if (region !== 'all' && (i.region_scope || 'sea') !== region) return false
     if (effectiveCountry !== 'all' && i.country !== effectiveCountry) return false
     if (category !== 'all' && i.category !== category) return false
     if (sector !== 'all' && i.sector !== sector) return false
+    if (!matchesQuery(i, tokens)) return false
     return true
-  }), [items, region, country, category, sector])
+  }), [items, region, effectiveCountry, category, sector, tokens])
+
+  // When searching: one flat list, relevance-then-recency. Browsing keeps the
+  // grouped category sections below.
+  const flatResults = useMemo(() => {
+    if (!searching) return [] as Item[]
+    return [...filtered].sort((a, b) => {
+      const r = searchRank(b, tokens) - searchRank(a, tokens)
+      if (r !== 0) return r
+      return (b.published_at || '').localeCompare(a.published_at || '')
+    })
+  }, [filtered, searching, tokens])
 
   // Group by category — SEA items first, then global, newest within each
   const byCategory = useMemo(() => {
@@ -116,8 +153,8 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
     return out
   }, [filtered])
 
-  const anyFilterActive = region !== 'all' || country !== 'all' || category !== 'all' || sector !== 'all'
-  function resetFilters() { setRegion('all'); setCountry('all'); setCategory('all'); setSector('all') }
+  const anyFilterActive = searching || region !== 'all' || country !== 'all' || category !== 'all' || sector !== 'all'
+  function resetFilters() { setQuery(''); setRegion('all'); setCountry('all'); setCategory('all'); setSector('all') }
 
   // Export the currently-filtered items as CSV (opens directly in Excel — no dependency)
   function exportExcel() {
@@ -236,10 +273,31 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
 
       {/* Filters: region, country, category, sector */}
       <div className="bg-white border border-border rounded-xl p-4 mb-5">
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Filter</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2.5 flex items-center justify-between">
+          <span>Filter</span>
           {anyFilterActive && (
-            <button onClick={resetFilters} className="text-[11px] text-[#1a4d2e] hover:underline">Reset all</button>
+            <button onClick={resetFilters} className="text-[11px] text-[#1a4d2e] hover:underline normal-case font-normal">Reset all</button>
+          )}
+        </div>
+        {/* Search across headline, company, summary, why-it-matters, sector, country, investor */}
+        <div className="relative mb-2">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
+            placeholder="Search news — company, investor, sector…"
+            className="w-full text-xs border border-border-strong rounded-md pl-8 pr-8 py-2 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/15 transition-colors"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+            >
+              ✕
+            </button>
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -255,13 +313,26 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
         <div className="text-[11px] text-gray-500 mt-2">{filtered.length} stor{filtered.length === 1 ? 'y' : 'ies'} match</div>
       </div>
 
-      {/* Sections — top 5 per category + show more */}
+      {/* Results — flat ranked list when searching, grouped sections when browsing */}
       {filtered.length === 0 ? (
         <div className="bg-white border border-border rounded-xl p-8 text-center">
           <div className="text-3xl opacity-30 mb-2">📰</div>
           <h2 className="text-base font-semibold text-text-primary mb-1">Nothing matches</h2>
-          <p className="text-sm text-gray-600">{anyFilterActive ? 'Try adjusting or resetting your filters.' : 'News will appear here once the super admin approves items.'}</p>
+          <p className="text-sm text-gray-600">
+            {searching
+              ? <>No stories match “{query.trim()}”. <button onClick={() => setQuery('')} className="text-[#1a4d2e] underline">Clear search</button>{(region !== 'all' || country !== 'all' || category !== 'all' || sector !== 'all') ? ' or reset the filters.' : '.'}</>
+              : anyFilterActive ? 'Try adjusting or resetting your filters.' : 'News will appear here once the super admin approves items.'}
+          </p>
         </div>
+      ) : searching ? (
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">
+            Results for “{query.trim()}” <span className="text-gray-400">({flatResults.length})</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {flatResults.map(item => <ItemCard key={item.id} item={item} />)}
+          </div>
+        </section>
       ) : (
         <div className="space-y-6">
           {CATEGORIES.map(cat => {

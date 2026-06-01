@@ -16,19 +16,74 @@ import { supabaseAdmin } from './supabase'
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'] as const
 
+// ── Per-call budget (tightened so no single item can hog the run) ──
+const PER_ATTEMPT_TIMEOUT_MS = 12_000   // hard kill a slow Gemini call at 12s
+const MAX_ATTEMPTS_PER_MODEL = 2        // 2 flash + 2 pro = 4 shots/item worst case
+const BACKOFF_BASE_MS        = 1_000    // 1s before the single retry
+
+// ── Flash circuit breaker ──
+// Flash is the default. If it's overloaded (429/503) enough times in ONE run,
+// we flip to pro-only for the REST of that run instead of paying a doomed flash
+// attempt on every remaining item. Pro is ALWAYS retained as the fallback.
+const FLASH_BREAKER_THRESHOLD = 5
+
+/**
+ * Per-run mutable state shared across concurrent workers.
+ * Single-threaded JS → plain counter mutation is safe (no locks needed).
+ */
+type RunState = {
+  flashDisabled:  boolean   // true once the breaker trips → skip flash, go straight to pro
+  flashOverloads: number    // count of flash 429/503 this run
+}
+
+function makeRunState(): RunState {
+  return { flashDisabled: false, flashOverloads: 0 }
+}
+
+/** HTTP error carrying the status code so callers can detect overload (429/503). */
+class GeminiHttpError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+function isOverloadError(err: unknown): boolean {
+  return err instanceof GeminiHttpError && (err.status === 429 || err.status >= 500)
+}
+
 /**
  * Call Gemini via raw REST (matches lib/gemini.ts — no SDK dependency).
- * Retries up to 5 times per model on 5xx/429 with exponential backoff,
- * then falls through flash → pro. Throws only if all models+retries exhaust.
+ * Model order: flash → pro. If `state.flashDisabled` is set (breaker tripped),
+ * we start at pro and skip flash entirely. Pro is never dropped — it's the backup.
+ * Throws only if every available model+retry is exhausted.
  */
-async function callGeminiText(prompt: string, opts?: { json?: boolean; maxTokens?: number }): Promise<string> {
+async function callGeminiText(
+  prompt: string,
+  opts?: { json?: boolean; maxTokens?: number },
+  state?: RunState,
+): Promise<string> {
+  // Skip flash only when the breaker has tripped this run; pro is always tried.
+  const startIndex = state?.flashDisabled ? 1 : 0
   let lastErr: unknown = null
-  for (let mi = 0; mi < GEMINI_MODELS.length; mi++) {
+
+  for (let mi = startIndex; mi < GEMINI_MODELS.length; mi++) {
     const model = GEMINI_MODELS[mi]
     try {
       return await callGeminiModelAttempt(model, prompt, opts)
     } catch (err) {
       lastErr = err
+
+      // Flash overloaded? Count it; trip the breaker so the rest of the run goes pro-only.
+      if (model === 'gemini-2.5-flash' && state && isOverloadError(err)) {
+        state.flashOverloads++
+        if (!state.flashDisabled && state.flashOverloads >= FLASH_BREAKER_THRESHOLD) {
+          state.flashDisabled = true
+          console.warn(`[news-pipeline] flash circuit breaker TRIPPED after ${state.flashOverloads} overloads — routing remaining items straight to ${GEMINI_MODELS[1]}`)
+        }
+      }
+
       const isLastModel = mi === GEMINI_MODELS.length - 1
       if (isLastModel) throw err
       console.warn(`[news-pipeline] ${model} exhausted retries, falling through to ${GEMINI_MODELS[mi + 1]}`)
@@ -39,10 +94,9 @@ async function callGeminiText(prompt: string, opts?: { json?: boolean; maxTokens
 
 async function callGeminiModelAttempt(model: string, prompt: string, opts?: { json?: boolean; maxTokens?: number }): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
-  const maxAttempts = 3
   let lastErr: unknown = null
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -55,20 +109,20 @@ async function callGeminiModelAttempt(model: string, prompt: string, opts?: { js
             ...(opts?.json ? { responseMimeType: 'application/json' } : {}),
           },
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS),
       })
       if (!res.ok) {
         const errText = await res.text()
         const msg = `Gemini ${res.status} (${model}): ${errText.slice(0, 150)}`
         // Retry on transient errors (503 overloaded, 429 rate limit, 5xx)
-        if ((res.status >= 500 || res.status === 429) && attempt < maxAttempts) {
-          const backoffMs = 1500 * Math.pow(2, attempt - 1)  // 1.5s, 3s, 6s, 12s
-          console.warn(`[news-pipeline] ${model} attempt ${attempt}/${maxAttempts} got ${res.status}, retrying in ${backoffMs}ms`)
+        if ((res.status >= 500 || res.status === 429) && attempt < MAX_ATTEMPTS_PER_MODEL) {
+          const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)  // 1s
+          console.warn(`[news-pipeline] ${model} attempt ${attempt}/${MAX_ATTEMPTS_PER_MODEL} got ${res.status}, retrying in ${backoffMs}ms`)
           await new Promise(r => setTimeout(r, backoffMs))
-          lastErr = new Error(msg)
+          lastErr = new GeminiHttpError(msg, res.status)
           continue
         }
-        throw new Error(msg)
+        throw new GeminiHttpError(msg, res.status)
       }
       const data = await res.json() as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
@@ -77,8 +131,8 @@ async function callGeminiModelAttempt(model: string, prompt: string, opts?: { js
     } catch (err) {
       lastErr = err
       // Network errors (fetch threw / timeout) — retry too
-      if (attempt < maxAttempts) {
-        const backoffMs = 1500 * Math.pow(2, attempt - 1)
+      if (attempt < MAX_ATTEMPTS_PER_MODEL) {
+        const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
         await new Promise(r => setTimeout(r, backoffMs))
         continue
       }
@@ -337,10 +391,10 @@ function safeParseJson<T>(raw: string): T | null {
   }
 }
 
-async function extractWithGemini(item: RssItem, scope: 'sea' | 'global'): Promise<ExtractedItem | null> {
+async function extractWithGemini(item: RssItem, scope: 'sea' | 'global', state?: RunState): Promise<ExtractedItem | null> {
   try {
     const input = `TITLE: ${item.title}\n\nDESCRIPTION: ${item.description}\n\nSOURCE: ${item.source}`
-    const text = await callGeminiText(`${buildExtractionPrompt(scope)}\n\n${input}`, { json: true, maxTokens: 2048 })
+    const text = await callGeminiText(`${buildExtractionPrompt(scope)}\n\n${input}`, { json: true, maxTokens: 2048 }, state)
     const parsed = safeParseJson<ExtractedItem>(text)
     if (!parsed) {
       console.warn('[news-pipeline] parse failed. Raw Gemini output (first 200 chars):', text.slice(0, 200).replace(/\n/g, '\\n'))
@@ -370,8 +424,52 @@ function normalizeTitle(t: string): string {
   return t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 80)
 }
 
-// Max Gemini calls per run — hard cap so a bad day can't run for 22 minutes.
-const MAX_GEMINI_CALLS = 60
+// Max Gemini calls per run — hard cap on how many candidates we extract.
+// Raised from 60: bounded concurrency makes a larger set fit comfortably,
+// and the wall-clock guard (below) is the real safety net against timeouts.
+const MAX_GEMINI_CALLS = 120
+
+// How many Gemini extractions run concurrently. ~6 is a safe balance: a big
+// wall-clock speedup without hammering Gemini's per-minute rate limits.
+const GEMINI_CONCURRENCY = 6
+
+// Stop LAUNCHING new extractions once the run has been going this long. Each
+// in-flight item is independently bounded by the per-call timeout, so the
+// function always returns well under Vercel's 300s ceiling. Anything not
+// reached this run is retried by the next daily cron (RSS + URL dedupe make
+// the whole pipeline idempotent). NOTE: the Monday cron also runs the weekly
+// digest after this — 220s leaves headroom for that within the same 300s.
+const WALL_CLOCK_BUDGET_MS = 220_000
+
+/**
+ * Bounded-concurrency pool. Runs `worker` over `items` with at most
+ * `concurrency` promises in flight at once. `shouldStop` is checked before
+ * pulling each next item — once it returns true, no NEW items are launched
+ * (already in-flight items run to completion).
+ */
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+  shouldStop?: () => boolean,
+): Promise<void> {
+  let cursor = 0
+  async function drain(): Promise<void> {
+    while (cursor < items.length) {
+      if (shouldStop?.()) return
+      const item = items[cursor++]
+      try {
+        await worker(item)
+      } catch (err) {
+        // Workers handle their own errors; this is a last-resort guard so one
+        // unexpected throw can't reject the whole Promise.all and abort the run.
+        console.error('[news-pipeline] worker threw unexpectedly:', err)
+      }
+    }
+  }
+  const lanes = Array.from({ length: Math.min(concurrency, items.length) }, () => drain())
+  await Promise.all(lanes)
+}
 
 export async function runNewsPipeline(): Promise<{
   fetched: number
@@ -439,19 +537,26 @@ export async function runNewsPipeline(): Promise<{
 
   console.log(`[news-pipeline] pre-filter done. candidates: sea=${seaCandidates.length} global=${globalCandidates.length}. Processing ${workList.length} (cap ${MAX_GEMINI_CALLS}).`)
 
-  // ── STAGE 3: Gemini extraction only on the survivors ──
-  let geminiCalls = 0
-  for (const { item, scope, pubMs } of workList) {
-    if (geminiCalls >= MAX_GEMINI_CALLS) break
-    geminiCalls++
+  // ── STAGE 3: Gemini extraction (bounded concurrency + wall-clock guard) ──
+  // Process the work list with a small pool of concurrent workers instead of
+  // one-at-a-time. The wall-clock guard stops launching NEW work before we
+  // approach the 300s Vercel ceiling, and each in-flight call is bounded by
+  // PER_ATTEMPT_TIMEOUT_MS — so the run ALWAYS returns cleanly. The flash
+  // circuit breaker lives in runState (pro is retained as the fallback).
+  const runState = makeRunState()
+  const pipelineStart = Date.now()
+  let processed = 0
+  let stoppedEarly = false
 
-    const extracted = await extractWithGemini(item, scope)
-    if (!extracted) { errors++; continue }
-    await new Promise(r => setTimeout(r, 200))  // gentle pacing
+  const handleCandidate = async ({ item, scope, pubMs }: Candidate): Promise<void> => {
+    processed++
 
-    if (extracted.is_roundup) { skipped++; continue }
-    if (scope === 'sea' && !extracted.is_sea_relevant) { skipped++; continue }
-    if (scope === 'global' && !extracted.is_globally_interesting) { skipped++; continue }
+    const extracted = await extractWithGemini(item, scope, runState)
+    if (!extracted) { errors++; return }
+
+    if (extracted.is_roundup) { skipped++; return }
+    if (scope === 'sea' && !extracted.is_sea_relevant) { skipped++; return }
+    if (scope === 'global' && !extracted.is_globally_interesting) { skipped++; return }
 
     const { error } = await supabaseAdmin
       .from('news_items')
@@ -473,6 +578,7 @@ export async function runNewsPipeline(): Promise<{
         region_scope:      scope,
       })
     if (error) {
+      // 23505 = unique violation (a concurrent worker inserted the same URL first) → treat as dup
       if (error.code !== '23505') { console.error('[news-pipeline] insert failed:', error.message); errors++ }
       else skipped++
     } else {
@@ -482,7 +588,16 @@ export async function runNewsPipeline(): Promise<{
     }
   }
 
-  console.log(`[news-pipeline] complete. fetched=${fetched} processed=${geminiCalls} new=${inserted} (sea=${seaInserted} global=${globalInserted}) skipped=${skipped} errors=${errors}`)
+  await runPool(workList, GEMINI_CONCURRENCY, handleCandidate, () => {
+    if (Date.now() - pipelineStart > WALL_CLOCK_BUDGET_MS) { stoppedEarly = true; return true }
+    return false
+  })
+
+  if (stoppedEarly) {
+    console.warn(`[news-pipeline] wall-clock guard hit (${WALL_CLOCK_BUDGET_MS}ms) — stopped launching new items. Processed ${processed}/${workList.length}; remainder deferred to next run.`)
+  }
+
+  console.log(`[news-pipeline] complete. fetched=${fetched} processed=${processed} new=${inserted} (sea=${seaInserted} global=${globalInserted}) skipped=${skipped} errors=${errors}${stoppedEarly ? ' [stopped early — budget guard]' : ''}`)
   return { fetched, new: inserted, skipped, errors }
 }
 
