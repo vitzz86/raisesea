@@ -113,7 +113,17 @@ async function callGeminiModelAttempt(model: string, prompt: string, opts?: { js
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: opts?.maxTokens || 2048,
+            // Gemini 2.5 (flash/pro) are THINKING models: reasoning tokens are
+            // billed against maxOutputTokens. With a tight cap, thinking starves
+            // the visible output → 200 response, finishReason MAX_TOKENS, body
+            // truncated mid-sentence. Fix per Google's production guidance:
+            //   - bound thinking to 1024 (some reasoning, not unlimited)
+            //   - give the cap generous headroom (8192) so output always fits,
+            //     even though thinkingBudget is sometimes ignored by the API.
+            // maxOutputTokens is a ceiling, not a reservation — short news
+            // outputs are billed at actual size, so the higher cap is free.
+            maxOutputTokens: opts?.maxTokens || 8192,
+            thinkingConfig: { thinkingBudget: 1024 },
             ...(opts?.json ? { responseMimeType: 'application/json' } : {}),
           },
         }),
@@ -133,11 +143,24 @@ async function callGeminiModelAttempt(model: string, prompt: string, opts?: { js
         throw new GeminiHttpError(msg, res.status)
       }
       const data = await res.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
       }
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const candidate = data.candidates?.[0]
+      const text = candidate?.content?.parts?.[0]?.text || ''
+      // Hard guard: if the model still hit the token ceiling (thinking budget is
+      // occasionally ignored by the API), the body is truncated. Do NOT return
+      // it — safeParseJson would "repair" the broken JSON and we'd silently
+      // store a half-written take. Throw so the caller falls through to the
+      // other model instead. Retrying the SAME model is pointless (same cap).
+      if (candidate?.finishReason === 'MAX_TOKENS') {
+        throw new Error(`Gemini ${model} hit MAX_TOKENS — output truncated (raise maxOutputTokens or lower thinkingBudget)`)
+      }
+      return text
     } catch (err) {
       lastErr = err
+      // MAX_TOKENS truncation won't improve by retrying the same model (same
+      // cap) — propagate immediately so the caller falls through to the other model.
+      if (err instanceof Error && err.message.includes('MAX_TOKENS')) throw err
       // Network errors (fetch threw / timeout) — retry too
       if (attempt < MAX_ATTEMPTS_PER_MODEL) {
         const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
