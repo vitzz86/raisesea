@@ -12,6 +12,7 @@
 //   4. Record in news_digests + update last_digest_sent_at
 // ═══════════════════════════════════════════════════════════════
 
+import { createHash } from 'node:crypto'
 import { supabaseAdmin } from './supabase'
 import { sendEmail, sendEmailBatch, wrapEmailHTML } from './resend'
 import { verifyTake } from './editorial-verify'
@@ -245,7 +246,16 @@ export async function sendWeeklyDigest(opts: {
       return { to: sub.email, subject, html, text, tags: [{ name: 'category', value: 'weekly_digest' }] }
     })
 
-    const res = await sendEmailBatch(payloads, { idempotencyKey: `digest-${weekKey}-c${chunkIndex}` })
+    // Idempotency key MUST fingerprint the actual payload, not just (week,
+    // chunk#). Resend returns 409 if the same key is reused within 24h with a
+    // *different* body — which happens whenever the email body changes (a
+    // redeploy) or a later run targets a different set of recipients (the resume
+    // guard). Hashing recipients+html means: a true retry of the identical batch
+    // dedupes (same key), but any real change gets a fresh key and sends.
+    const fingerprint = createHash('sha256')
+      .update(payloads.map(p => `${p.to}\u0001${p.html}`).join('\u0002'))
+      .digest('hex').slice(0, 16)
+    const res = await sendEmailBatch(payloads, { idempotencyKey: `digest-${weekKey}-${fingerprint}` })
 
     if (res.ok) {
       sentCount += chunk.length
