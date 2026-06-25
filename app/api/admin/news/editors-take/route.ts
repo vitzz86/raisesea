@@ -15,7 +15,7 @@ export async function POST() {
 
   const take = await generateEditorsTake()
   if (!take) {
-    return NextResponse.json({ error: 'Failed to generate — no approved items in last 7 days, or Gemini error' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to generate — no approved items in last 7 days, or DeepSeek error' }, { status: 500 })
   }
 
   // Top stories are part of the same weekly artifact (best-effort: a failure

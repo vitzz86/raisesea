@@ -1,48 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseBrowserClient } from '@/lib/supabase-client'
 
 export default function LoginForm({ redirectTo, initialError }: { redirectTo: string; initialError?: string }) {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState<'magic' | 'google' | null>(null)
+  const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(
     initialError
-      ? { kind: 'error', text: initialError.includes('PKCE') || initialError.includes('verifier')
-          ? 'Your sign-in link expired. Please try signing in again.'
+      ? { kind: 'error', text: initialError.includes('PKCE') || initialError.includes('verifier') || initialError.includes('link')
+          ? 'That sign-in attempt expired. Please continue with Google.'
           : initialError }
       : null
   )
   const supabase = getSupabaseBrowserClient()
 
-  async function handleMagicLink(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email || !email.includes('@')) {
-      setMessage({ kind: 'error', text: 'Please enter a valid email address.' })
-      return
-    }
-    setLoading('magic')
-    setMessage(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}` },
-    })
-    setLoading(null)
-    if (error) setMessage({ kind: 'error', text: error.message })
-    else setMessage({ kind: 'success', text: `Magic link sent to ${email}. Check your inbox.` })
-  }
-
   async function handleGoogle() {
-    setLoading('google')
+    setLoading(true)
     setMessage(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}` },
     })
-    if (error) { setLoading(null); setMessage({ kind: 'error', text: error.message }) }
+    if (error) { setLoading(false); setMessage({ kind: 'error', text: error.message }) }
   }
 
   return (
@@ -54,26 +34,11 @@ export default function LoginForm({ redirectTo, initialError }: { redirectTo: st
         </div>
         <div className="bg-white rounded-xl border border-border p-8 shadow-sm">
           <h1 className="text-xl font-semibold text-gray-900 mb-1">Sign in</h1>
-          <p className="text-sm text-gray-600 mb-6">Use your email or Google account. No password needed.</p>
-          <button type="button" onClick={handleGoogle} disabled={loading !== null}
+          <p className="text-sm text-gray-600 mb-6">Use your Google account to continue. No password, no magic-link limits.</p>
+          <button type="button" onClick={handleGoogle} disabled={loading}
             className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-border-strong rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition">
-            <GoogleIcon />{loading === 'google' ? 'Redirecting…' : 'Continue with Google'}
+            <GoogleIcon />{loading ? 'Redirecting...' : 'Continue with Google'}
           </button>
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-            <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-500">OR</span></div>
-          </div>
-          <form onSubmit={handleMagicLink} className="space-y-3">
-            <div>
-              <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">Email address</label>
-              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" required disabled={loading !== null}
-                className="w-full px-3 py-2 border border-border-strong rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1a4d2e]/30 focus:border-[#1a4d2e] disabled:bg-gray-50" />
-            </div>
-            <button type="submit" disabled={loading !== null || !email}
-              className="w-full py-2.5 px-4 bg-[#1a4d2e] hover:bg-[#143d24] text-white text-sm font-medium rounded-lg disabled:opacity-50 transition">
-              {loading === 'magic' ? 'Sending…' : 'Send magic link'}
-            </button>
-          </form>
           {message && (
             <div className={`mt-4 text-sm rounded-lg p-3 ${message.kind === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>{message.text}</div>
           )}

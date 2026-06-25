@@ -92,7 +92,7 @@ export default function MatchView({ isOwner }: MatchViewProps) {
   // Share — try native Web Share, fall back to clipboard copy
   async function handleShare() {
     const url = typeof window !== 'undefined' ? window.location.href : ''
-    const title = `RaiseSEA match — ${sub.company_name as string}`
+    const title = `RaiseSEA match — ${String(sub?.company_name || 'analysis')}`
     if (navigator.share) {
       try {
         await navigator.share({ title, url })

@@ -389,7 +389,7 @@ function EditorTab({ takes }: { takes: Take[] }) {
       <div className="mb-4">
         <button onClick={generate} disabled={working}
           className="bg-brand hover:bg-brand-hover text-white text-sm font-medium rounded-md px-3 py-1.5 disabled:opacity-50">
-          {working ? 'Generating…' : '⚡ Generate new take (Gemini)'}
+          {working ? 'Generating…' : 'Generate new take (DeepSeek)'}
         </button>
         <p className="text-xs text-text-tertiary mt-1.5">Pulls last 7 days of approved items to write 3-5 sentence opinion.</p>
       </div>

@@ -3,7 +3,7 @@
 // Called by Vercel Cron Jobs (configured in vercel.json).
 // Auth via CRON_SECRET header check.
 //
-// On every run: fetches RSS + extracts via Gemini (idempotent — dedupes by URL)
+// On every run: fetches RSS + extracts via DeepSeek (idempotent — dedupes by URL)
 // On Mondays at 09:00 SGT (01:00 UTC): also sends the weekly digest
 // ═══════════════════════════════════════════════════════════════
 

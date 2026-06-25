@@ -241,7 +241,7 @@ const testSubmissions: Category = {
     const soloGroups = decisions.filter(d => d.isSolo)
     const dupGroups  = decisions.filter(d => !d.isSolo)
 
-    console.log(warn(`Found ${data.length} test submission(s) across ${groups.size} company group(s).`))
+    console.log(warn(`Found ${data.length} test submission(s) across ${groups.size} company group(s).`));
     console.log(`  ${c.green}KEEP${c.reset}:   ${toKeep.length} (${soloGroups.length} solo + ${dupGroups.length} latest-per-group)`)
     console.log(`  ${c.red}DELETE${c.reset}: ${toDelete.length} (older/duplicate versions)`)
     console.log()
@@ -335,7 +335,7 @@ const abandonedDecks: Category = {
     if (error) { console.error(danger(`Query failed: ${error.message}`)); return }
     if (!data || data.length === 0) { console.log(ok('No abandoned decks found.')); return }
 
-    console.log(warn(`Found ${data.length} abandoned deck(s) older than ${ABANDONED_DECK_DAYS} days:`))
+    console.log(warn(`Found ${data.length} abandoned deck(s) older than ${ABANDONED_DECK_DAYS} days:`));
     (VERBOSE ? data : data.slice(0, 10)).forEach((s, i) => {
       const date = new Date(s.created_at as string).toISOString().split('T')[0]
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. ${s.company_name} ${dim(`— ${date}`)}`)
@@ -397,7 +397,7 @@ const staleMockPitch: Category = {
     if (error) { console.error(danger(`Query failed: ${error.message}`)); return }
     if (!data || data.length === 0) { console.log(ok('No stale mock pitches found.')); return }
 
-    console.log(warn(`Found ${data.length} abandoned mock pitch session(s):`))
+    console.log(warn(`Found ${data.length} abandoned mock pitch session(s):`));
     (VERBOSE ? data : data.slice(0, 10)).forEach((s, i) => {
       const date = new Date(s.started_at as string).toISOString().split('T')[0]
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. ${s.mode} (${s.status}) ${dim(`— ${date} — ${(s.id as string).slice(0, 8)}`)}`)
@@ -445,7 +445,7 @@ const deadMeetings: Category = {
       .map(([s, n]) => `${s}=${n}`)
       .join(', ')
 
-    console.log(warn(`Found ${data.length} dead meeting request(s): ${statusBreakdown}`))
+    console.log(warn(`Found ${data.length} dead meeting request(s): ${statusBreakdown}`));
     (VERBOSE ? data : data.slice(0, 10)).forEach((s, i) => {
       const date = new Date(s.created_at as string).toISOString().split('T')[0]
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. [${s.status}] ${s.meeting_goal} ${dim(`— ${date} — ${(s.id as string).slice(0, 8)}`)}`)
@@ -487,7 +487,7 @@ const oldNews: Category = {
       .order('published_at', { ascending: true })
       .limit(5)
 
-    console.log(warn(`Found ${count} news item(s) older than ${OLD_NEWS_DAYS} days. Sample (oldest first):`))
+    console.log(warn(`Found ${count} news item(s) older than ${OLD_NEWS_DAYS} days. Sample (oldest first):`));
     sample?.forEach((s, i) => {
       const date = new Date(s.published_at as string).toISOString().split('T')[0]
       const title = (s.title as string).slice(0, 70)
@@ -541,7 +541,7 @@ const orphanStorage: Category = {
       return
     }
 
-    console.log(warn(`Found ${orphans.length} orphan file(s) of ${allFiles.length} total:`))
+    console.log(warn(`Found ${orphans.length} orphan file(s) of ${allFiles.length} total:`));
     (VERBOSE ? orphans : orphans.slice(0, 10)).forEach((f, i) => {
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. ${f}`)
     })
@@ -572,7 +572,7 @@ const testCrm: Category = {
     if (error) { console.error(danger(`Query failed: ${error.message}`)); return }
     if (!data || data.length === 0) { console.log(ok('No test CRM contacts found.')); return }
 
-    console.log(warn(`Found ${data.length} test CRM contact(s):`))
+    console.log(warn(`Found ${data.length} test CRM contact(s):`));
     (VERBOSE ? data : data.slice(0, 10)).forEach((s, i) => {
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. ${s.name} @ ${s.company || '—'}`)
     })
@@ -607,7 +607,7 @@ const superAdminExtras: Category = {
       return
     }
 
-    console.log(warn(`Found ${data.length} non-whitelisted super admin(s):`))
+    console.log(warn(`Found ${data.length} non-whitelisted super admin(s):`));
     data.forEach((s, i) => {
       console.log(`  ${dim(String(i + 1).padStart(2, ' '))}. ${s.email}`)
     })
@@ -652,7 +652,7 @@ async function main() {
 
   if (CONFIRM) {
     console.log()
-    console.log(warn('This will permanently delete data. You will confirm each category.'))
+    console.log(warn('This will permanently delete data. You will confirm each category.'));
     const proceed = await confirmPrompt(`Continue against ${projectUrl}?`)
     if (!proceed) { console.log(dim('Aborted.')); return }
     log(`=== Cleanup run started against ${projectUrl} ===`)

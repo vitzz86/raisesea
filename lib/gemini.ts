@@ -518,11 +518,11 @@ export async function analyzeDeck(
 
   const benchmarkBlock = stageBench ? `
 TYPICAL BENCHMARKS AT ${stage.toUpperCase()} (SEA, source: ${stageBench.source || 'industry benchmarks'}):
-- Typical raise range: ${stageBench.sea_raise_min_usd ? '$' + (stageBench.sea_raise_min_usd/1e6).toFixed(1) + 'M' : '?'} – ${stageBench.sea_raise_max_usd ? '$' + (stageBench.sea_raise_max_usd/1e6).toFixed(1) + 'M' : '?'} (median ~$${stageBench.sea_raise_median_usd ? (stageBench.sea_raise_median_usd/1e6).toFixed(1) : '?'}M)
+- Typical raise range: ${stageBench.sea_raise_low_usd ? '$' + (stageBench.sea_raise_low_usd/1e6).toFixed(1) + 'M' : '?'} – ${stageBench.sea_raise_high_usd ? '$' + (stageBench.sea_raise_high_usd/1e6).toFixed(1) + 'M' : '?'} (median ~$${stageBench.sea_raise_median_usd ? (stageBench.sea_raise_median_usd/1e6).toFixed(1) : '?'}M)
 - Typical pre-money: ${stageBench.sea_premoney_low_usd ? '$' + (stageBench.sea_premoney_low_usd/1e6).toFixed(1) + 'M' : '?'} – ${stageBench.sea_premoney_high_usd ? '$' + (stageBench.sea_premoney_high_usd/1e6).toFixed(1) + 'M' : '?'}
 - Minimum traction expected: ${stageBench.min_traction || 'see sector norms'}
 - Key risk investors evaluate: ${stageBench.key_risk || 'execution and traction'}
-- Typical investor types: ${stageBench.typical_investor_types?.join(', ') || 'seed/early-stage VCs and angels'}
+- Typical investor types: ${stageBench.investor_types?.join(', ') || 'seed/early-stage VCs and angels'}
 ` : ''
 
   const prompt = `You are an expert pitch deck analyst evaluating a ${stage} startup for investor readiness.

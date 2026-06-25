@@ -59,6 +59,11 @@ type Props = {
   glance: Glance
   dateRange: string
   weekStats: { dealCount: number; totalRaised: number; sectorCount: number }
+  publicMode?: boolean
+  className?: string
+  headingId?: string
+  headingLevel?: 'h1' | 'h2'
+  loginHref?: string
 }
 
 const CATEGORIES = [
@@ -97,7 +102,22 @@ function searchRank(item: Item, tokens: string[]): number {
   return score
 }
 
-export default function NewsFeed({ items, userSectors, editorsTake, trending, topStories, categorizedTopStories, glance, dateRange, weekStats }: Props) {
+export default function NewsFeed({
+  items,
+  userSectors,
+  editorsTake,
+  trending,
+  topStories,
+  categorizedTopStories,
+  glance,
+  dateRange,
+  weekStats,
+  publicMode = false,
+  className = 'max-w-5xl',
+  headingId,
+  headingLevel = 'h1',
+  loginHref = '/login?redirectTo=/news',
+}: Props) {
   // Filters
   const [query, setQuery]       = useState<string>('')
   const [region, setRegion]     = useState<'all' | 'sea' | 'global'>('all')
@@ -157,6 +177,7 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
 
   const anyFilterActive = searching || region !== 'all' || country !== 'all' || category !== 'all' || sector !== 'all'
   function resetFilters() { setQuery(''); setRegion('all'); setCountry('all'); setCategory('all'); setSector('all') }
+  const Heading = headingLevel === 'h2' ? 'h2' : 'h1'
 
   // Export the currently-filtered items as CSV (opens directly in Excel — no dependency)
   function exportExcel() {
@@ -186,20 +207,28 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
   }
 
   return (
-    <div className="max-w-5xl">
+    <div className={className}>
       {/* Page header */}
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Weekly SEA Fundraising Digest</h1>
+          <Heading id={headingId} className="text-2xl font-semibold text-gray-900">Weekly SEA Fundraising Digest</Heading>
           <p className="text-sm text-gray-600 mt-1">{dateRange} · curated fundraising, tech, and policy news.</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Link href="/news/history" className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
-            🗓 Past weeks
-          </Link>
-          <button onClick={exportExcel} className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
-            📥 Export CSV
-          </button>
+          {publicMode ? (
+            <Link href={loginHref} className="text-xs font-medium bg-brand text-text-inverse rounded-md px-3 py-1.5 hover:bg-brand-hover transition whitespace-nowrap">
+              Sign in for weekly news
+            </Link>
+          ) : (
+            <>
+              <Link href="/news/history" className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
+                🗓 Past weeks
+              </Link>
+              <button onClick={exportExcel} className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
+                📥 Export CSV
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -347,9 +376,19 @@ export default function NewsFeed({ items, userSectors, editorsTake, trending, to
         </div>
       )}
 
-      <p className="text-[11px] text-gray-400 text-center mt-8">
-        Showing approved items from the last 7 days. <Link href="/news/history" className="underline">Browse past weeks →</Link>
-      </p>
+      {publicMode ? (
+        <div className="bg-brand-soft border border-brand/20 rounded-xl p-4 mt-8 text-sm text-text-secondary">
+          <div className="font-semibold text-text-primary">Want this every week?</div>
+          <p className="mt-1">
+            <Link href={loginHref} className="font-medium text-brand hover:text-brand-hover underline">Sign in with Google</Link>
+            {' '}to receive the weekly digest and unlock member-only past weeks plus CSV export.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-gray-400 text-center mt-8">
+          Showing approved items from the last 7 days. <Link href="/news/history" className="underline">Browse past weeks →</Link>
+        </p>
+      )}
     </div>
   )
 }

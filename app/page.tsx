@@ -17,10 +17,12 @@
 
 import Link from 'next/link'
 import { getSessionUser } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { ArrowRight, Sparkles, BarChart3, Mic, Building2, Briefcase, ShieldCheck, MapPin, Newspaper, Calculator } from 'lucide-react'
 import { ScrollReveal, CountUp } from '@/components/landing/ScrollReveal'
 import { HeroCinematic } from '@/components/landing/HeroCinematic'
 import { MockPitchCinematic } from '@/components/landing/MockPitchCinematic'
+import type { CategorizedTopStories, TopStory, TopStoryCategory } from '@/lib/news-clustering'
 import {
   DeckAnalysisMockup,
   MockPitchMockup,
@@ -34,8 +36,12 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
-  const user = await getSessionUser()
+  const [user, newsPreview] = await Promise.all([
+    getSessionUser(),
+    loadLandingNewsPreview(),
+  ])
   const signedIn = !!user
+  const hasCategorizedTopStories = !!newsPreview.categorizedTopStories && Object.values(newsPreview.categorizedTopStories).some(Boolean)
 
   return (
     <div className="min-h-screen bg-surface-page text-text-primary">
@@ -51,6 +57,7 @@ export default async function HomePage() {
           <div className="flex items-center gap-6">
             <a href="#features"  className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Features</a>
             <a href="#why-sea"   className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Why SEA</a>
+            <Link href="/news"   className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">News</Link>
             <a href="#faq"       className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">FAQ</a>
             {signedIn ? (
               <Link href="/dashboard" className="text-sm font-medium bg-brand hover:bg-brand-hover text-text-inverse rounded-md px-3.5 py-1.5 transition-colors">
@@ -255,6 +262,77 @@ export default async function HomePage() {
             mockup={<NewsMockup />}
             mockupRight
           />
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          LIVE NEWS PREVIEW — public + crawlable
+          ═══════════════════════════════════════════════════════════ */}
+      <section id="news" aria-labelledby="news-heading" className="px-6 py-20 bg-surface-page">
+        <div className="max-w-6xl mx-auto">
+          <ScrollReveal>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-1.5 bg-brand-soft text-brand text-xs font-semibold uppercase tracking-normal px-3 py-1 rounded-full mb-4">
+                  <Newspaper className="w-4 h-4" strokeWidth={1.75} />
+                  SEA startup news
+                </div>
+                <h2 id="news-heading" className="text-3xl font-semibold tracking-normal">
+                  This week in SEA fundraising.
+                </h2>
+                <p className="text-base text-text-tertiary mt-3 max-w-2xl leading-relaxed">
+                  A quick taste of the weekly digest. Open News for the full searchable feed, filters, and member-only archive.
+                </p>
+              </div>
+              <Link
+                href={signedIn ? '/news' : '/login?redirectTo=/news'}
+                className="inline-flex items-center justify-center gap-2 rounded-input bg-brand px-4 py-2.5 text-sm font-medium text-text-inverse hover:bg-brand-hover transition"
+              >
+                {signedIn ? 'Open full digest' : 'Login for weekly news'}
+                <ArrowRight className="w-4 h-4" strokeWidth={1.75} />
+              </Link>
+            </div>
+          </ScrollReveal>
+
+          <div className="grid lg:grid-cols-[1fr_1.15fr] gap-5">
+            <ScrollReveal delay={80}>
+              {newsPreview.editorsTake && (newsPreview.editorsTake.headline || newsPreview.editorsTake.body) ? (
+                <div className="h-full rounded-card border border-brand/20 bg-gradient-to-br from-brand-pale to-white p-5">
+                  <div className="text-xs font-semibold uppercase tracking-normal text-brand mb-3">✍️ Editor&apos;s Take</div>
+                  {newsPreview.editorsTake.headline && (
+                    <h3 className="text-xl font-semibold text-text-primary leading-snug">{newsPreview.editorsTake.headline}</h3>
+                  )}
+                  {newsPreview.editorsTake.body && (
+                    <p className="text-sm text-text-secondary leading-relaxed mt-3 line-clamp-6">{newsPreview.editorsTake.body}</p>
+                  )}
+                  {newsPreview.editorsTake.takeaway && (
+                    <div className="mt-4 rounded-input border-l-2 border-brand bg-brand-soft px-3 py-2 text-sm font-medium text-brand">
+                      → {newsPreview.editorsTake.takeaway}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="h-full rounded-card border border-border bg-white p-5 text-sm text-text-secondary">
+                  Editor&apos;s Take will appear here after the weekly digest is approved.
+                </div>
+              )}
+            </ScrollReveal>
+
+            <ScrollReveal delay={140}>
+              {hasCategorizedTopStories ? (
+                <LandingTopStories stories={newsPreview.categorizedTopStories} />
+              ) : (
+                <div className="h-full rounded-card border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 text-sm text-text-secondary">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-base">🔥</span>
+                    <h3 className="text-base font-semibold text-text-primary">Top stories this week</h3>
+                    <span className="text-xs text-text-tertiary">editor&apos;s pick per category</span>
+                  </div>
+                  Top stories will appear here after this week&apos;s editor picks are approved.
+                </div>
+              )}
+            </ScrollReveal>
+          </div>
         </div>
       </section>
 
@@ -506,5 +584,88 @@ function FaqItem({ q, a }: { q: string; a: string }) {
       </summary>
       <p className="text-sm text-text-secondary mt-3 leading-relaxed">{a}</p>
     </details>
+  )
+}
+
+type LandingEditorsTake = {
+  headline: string | null
+  body: string | null
+  takeaway: string | null
+}
+
+async function loadLandingNewsPreview(): Promise<{
+  editorsTake: LandingEditorsTake | null
+  categorizedTopStories: CategorizedTopStories | null
+}> {
+  const { data: takes } = await supabaseAdmin
+    .from('editors_takes')
+    .select('headline, body, takeaway, content, top_stories')
+    .eq('status', 'approved')
+    .order('approved_at', { ascending: false })
+    .limit(1)
+
+  const t = takes?.[0]
+  let editorsTake: LandingEditorsTake | null = null
+  if (t) {
+    let body = t.body || null
+    if (!body && t.content) {
+      body = t.content
+      if (t.headline && body.startsWith(t.headline)) body = body.slice(t.headline.length).trim()
+      if (t.takeaway && body.endsWith(t.takeaway)) body = body.slice(0, body.length - t.takeaway.length).trim()
+      if (t.headline && body.startsWith(t.headline)) body = body.slice(t.headline.length).trim()
+    }
+    editorsTake = {
+      headline: t.headline || null,
+      body: body || null,
+      takeaway: t.takeaway || null,
+    }
+  }
+
+  return {
+    editorsTake,
+    categorizedTopStories: (t?.top_stories as CategorizedTopStories | null | undefined) || null,
+  }
+}
+
+const LANDING_TOP_STORY_ORDER: { key: TopStoryCategory; label: string }[] = [
+  { key: 'fundraising', label: '💰 Top fundraising' },
+  { key: 'tech',        label: '⚡ Top tech & product' },
+  { key: 'policy',      label: '🏛 Top policy & economic' },
+  { key: 'exit',        label: '🚪 Top exit' },
+]
+
+function LandingTopStories({ stories }: { stories: CategorizedTopStories | null }) {
+  const present = LANDING_TOP_STORY_ORDER.filter(c => stories?.[c.key])
+  if (present.length === 0) return null
+
+  return (
+    <div className="h-full rounded-card border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-base">🔥</span>
+        <h3 className="text-base font-semibold text-text-primary">Top stories this week</h3>
+        <span className="text-xs text-text-tertiary">editor&apos;s pick per category</span>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {present.map(({ key, label }) => {
+          const story = stories?.[key] as TopStory
+          return (
+            <article key={key} className="rounded-card border border-amber-100 bg-white p-3.5">
+              <div className="text-xs font-semibold uppercase tracking-normal text-amber-700 mb-1.5">{label}</div>
+              <h4 className="text-sm font-semibold text-text-primary leading-snug">{story.headline}</h4>
+              {story.why && <p className="text-xs text-text-secondary leading-relaxed mt-1.5 line-clamp-3">{story.why}</p>}
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                {story.sector && <span className="text-xs rounded-full border border-border bg-surface-muted px-2 py-0.5 text-text-tertiary">{story.sector}</span>}
+                {story.country && <span className="text-xs rounded-full border border-border bg-surface-muted px-2 py-0.5 text-text-tertiary">📍 {story.country}</span>}
+              </div>
+              {story.sources?.[0] && (
+                <a href={story.sources[0].url} target="_blank" rel="noopener noreferrer" className="inline-block text-xs font-medium text-brand hover:text-brand-hover mt-2">
+                  {story.sources[0].name} ↗
+                </a>
+              )}
+            </article>
+          )
+        })}
+      </div>
+    </div>
   )
 }

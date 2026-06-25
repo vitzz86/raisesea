@@ -1,14 +1,20 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import DashboardShell from '@/components/DashboardShell'
+import { NewsSignupPrompt } from '@/components/landing/NewsSignupPrompt'
 import NewsFeed from './NewsFeed'
 import { legacyTopStories, type StoryItem, type CategorizedTopStories } from '@/lib/news-clustering'
 
 export const dynamic = 'force-dynamic'
+
+type NewsProfile = {
+  full_name: string | null
+  company_name: string | null
+  news_sectors: string[] | null
+}
 
 export default async function NewsPage({
   searchParams,
@@ -16,17 +22,21 @@ export default async function NewsPage({
   searchParams: Promise<{ sectors?: string }>
 }) {
   const user = await getSessionUser()
-  if (!user) redirect('/login?redirectTo=/news')
+  let profile: NewsProfile | null = null
+  let admin = false
+  let isExpert = false
 
-  const supabase = await createSupabaseServerClient()
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('full_name, company_name, news_sectors')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const admin = await isSuperAdmin(user)
-  const isExpert = await isApprovedExpert(user.id)
+  if (user) {
+    const supabase = await createSupabaseServerClient()
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('full_name, company_name, news_sectors')
+      .eq('id', user.id)
+      .maybeSingle()
+    profile = data as NewsProfile | null
+    admin = await isSuperAdmin(user)
+    isExpert = await isApprovedExpert(user.id)
+  }
 
   // Load approved items from last 7 days (this week's feed)
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
@@ -83,23 +93,60 @@ export default async function NewsPage({
   const fmtRange = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const dateRange = `${fmtRange(rangeStart)} – ${fmtRange(rangeEnd)}, ${rangeEnd.getFullYear()}`
 
+  const feed = (
+    <NewsFeed
+      items={items || []}
+      userSectors={profile?.news_sectors || []}
+      editorsTake={editorsTake}
+      trending={trending}
+      topStories={topStories}
+      categorizedTopStories={hasCategorized ? categorizedTopStories : null}
+      glance={glance}
+      dateRange={dateRange}
+      weekStats={{
+        dealCount:    recentItems.filter(i => i.category === 'fundraising').length,
+        totalRaised:  recentItems.reduce((sum, i) => sum + (i.amount_usd || 0), 0),
+        sectorCount:  new Set(recentItems.map(i => i.sector).filter(Boolean)).size,
+      }}
+      publicMode={!user}
+      className={user ? 'max-w-5xl' : 'max-w-5xl mx-auto'}
+      loginHref="/login?redirectTo=/news"
+    />
+  )
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-surface-page text-text-primary">
+        <NewsSignupPrompt
+          signedIn={false}
+          trigger="immediate"
+          storageKey="raisesea_public_news_prompt_seen"
+          eyebrow="Weekly digest"
+          title="Try the full RaiseSEA experience."
+          body="Sign in with Google to receive weekly SEA fundraising news, plus deck analysis, mock pitch practice, investor matching, and CRM."
+          ctaLabel="Sign in with Google"
+          href="/login?redirectTo=/news"
+        />
+        <nav className="sticky top-0 z-40 bg-surface-page/85 backdrop-blur border-b border-border">
+          <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <Link href="/" className="text-lg font-semibold text-brand tracking-tight">RaiseSEA</Link>
+            <div className="flex items-center gap-5">
+              <Link href="/#features" className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Features</Link>
+              <Link href="/#why-sea" className="hidden sm:inline text-sm text-text-secondary hover:text-text-primary transition-colors">Why SEA</Link>
+              <Link href="/login?redirectTo=/news" className="text-sm font-medium bg-brand hover:bg-brand-hover text-text-inverse rounded-md px-3.5 py-1.5 transition-colors">Sign in</Link>
+            </div>
+          </div>
+        </nav>
+        <section className="px-6 py-8 md:py-10">
+          {feed}
+        </section>
+      </main>
+    )
+  }
+
   return (
     <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="news">
-      <NewsFeed
-        items={items || []}
-        userSectors={profile?.news_sectors || []}
-        editorsTake={editorsTake}
-        trending={trending}
-        topStories={topStories}
-        categorizedTopStories={hasCategorized ? categorizedTopStories : null}
-        glance={glance}
-        dateRange={dateRange}
-        weekStats={{
-          dealCount:    recentItems.filter(i => i.category === 'fundraising').length,
-          totalRaised:  recentItems.reduce((sum, i) => sum + (i.amount_usd || 0), 0),
-          sectorCount:  new Set(recentItems.map(i => i.sector).filter(Boolean)).size,
-        }}
-      />
+      {feed}
     </DashboardShell>
   )
 }

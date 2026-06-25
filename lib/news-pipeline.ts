@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
 // lib/news-pipeline.ts
-// RSS → Gemini → news_items pipeline.
+// RSS → DeepSeek → news_items pipeline.
 //
 // Sources for MVP: Tech in Asia, e27, TechCrunch Asia.
-// We fetch RSS, deduplicate by source_url, then ask Gemini to extract:
+// We fetch RSS, deduplicate by source_url, then ask DeepSeek to extract:
 //   - category (fundraising | tech | policy | exit)
 //   - company name + amount + sector (if fundraising)
 //   - 1-line summary
@@ -21,11 +21,12 @@ import {
   type TopStoryCategory,
 } from './news-clustering'
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'] as const
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
+const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/chat/completions'
+const DEEPSEEK_MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro'] as const
 
 // ── Per-call budget (tightened so no single item can hog the run) ──
-const PER_ATTEMPT_TIMEOUT_MS = 12_000   // hard kill a slow Gemini call at 12s
+const PER_ATTEMPT_TIMEOUT_MS = 12_000   // hard kill a slow DeepSeek call at 12s
 const MAX_ATTEMPTS_PER_MODEL = 2        // 2 flash + 2 pro = 4 shots/item worst case
 const BACKOFF_BASE_MS        = 1_000    // 1s before the single retry
 
@@ -49,7 +50,7 @@ function makeRunState(): RunState {
 }
 
 /** HTTP error carrying the status code so callers can detect overload (429/503). */
-class GeminiHttpError extends Error {
+class DeepSeekHttpError extends Error {
   status: number
   constructor(message: string, status: number) {
     super(message)
@@ -58,16 +59,16 @@ class GeminiHttpError extends Error {
 }
 
 function isOverloadError(err: unknown): boolean {
-  return err instanceof GeminiHttpError && (err.status === 429 || err.status >= 500)
+  return err instanceof DeepSeekHttpError && (err.status === 429 || err.status >= 500)
 }
 
 /**
- * Call Gemini via raw REST (matches lib/gemini.ts — no SDK dependency).
+ * Call DeepSeek via its OpenAI-compatible REST API (no SDK dependency).
  * Model order: flash → pro. If `state.flashDisabled` is set (breaker tripped),
  * we start at pro and skip flash entirely. Pro is never dropped — it's the backup.
  * Throws only if every available model+retry is exhausted.
  */
-async function callGeminiText(
+async function callDeepSeekText(
   prompt: string,
   opts?: { json?: boolean; maxTokens?: number },
   state?: RunState,
@@ -76,91 +77,94 @@ async function callGeminiText(
   const startIndex = state?.flashDisabled ? 1 : 0
   let lastErr: unknown = null
 
-  for (let mi = startIndex; mi < GEMINI_MODELS.length; mi++) {
-    const model = GEMINI_MODELS[mi]
+  for (let mi = startIndex; mi < DEEPSEEK_MODELS.length; mi++) {
+    const model = DEEPSEEK_MODELS[mi]
     try {
-      return await callGeminiModelAttempt(model, prompt, opts)
+      return await callDeepSeekModelAttempt(model, prompt, opts)
     } catch (err) {
       lastErr = err
 
       // Flash overloaded? Count it; trip the breaker so the rest of the run goes pro-only.
-      if (model === 'gemini-2.5-flash' && state && isOverloadError(err)) {
+      if (model === 'deepseek-v4-flash' && state && isOverloadError(err)) {
         state.flashOverloads++
         if (!state.flashDisabled && state.flashOverloads >= FLASH_BREAKER_THRESHOLD) {
           state.flashDisabled = true
-          console.warn(`[news-pipeline] flash circuit breaker TRIPPED after ${state.flashOverloads} overloads — routing remaining items straight to ${GEMINI_MODELS[1]}`)
+          console.warn(`[news-pipeline] flash circuit breaker TRIPPED after ${state.flashOverloads} overloads — routing remaining items straight to ${DEEPSEEK_MODELS[1]}`)
         }
       }
 
-      const isLastModel = mi === GEMINI_MODELS.length - 1
+      const isLastModel = mi === DEEPSEEK_MODELS.length - 1
       if (isLastModel) throw err
-      console.warn(`[news-pipeline] ${model} exhausted retries, falling through to ${GEMINI_MODELS[mi + 1]}`)
+      console.warn(`[news-pipeline] ${model} exhausted retries, falling through to ${DEEPSEEK_MODELS[mi + 1]}`)
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error('All Gemini models exhausted')
+  throw lastErr instanceof Error ? lastErr : new Error('All DeepSeek models exhausted')
 }
 
-async function callGeminiModelAttempt(model: string, prompt: string, opts?: { json?: boolean; maxTokens?: number }): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
+async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { json?: boolean; maxTokens?: number }): Promise<string> {
+  if (!DEEPSEEK_API_KEY) throw new Error('DEEPSEEK_API_KEY not configured')
   let lastErr: unknown = null
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
     try {
-      const res = await fetch(url, {
+      const res = await fetch(DEEPSEEK_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            // Gemini 2.5 (flash/pro) are THINKING models: reasoning tokens are
-            // billed against maxOutputTokens. With a tight cap, thinking starves
-            // the visible output → 200 response, finishReason MAX_TOKENS, body
-            // truncated mid-sentence. Fix per Google's production guidance:
-            //   - bound thinking to 1024 (some reasoning, not unlimited)
-            //   - give the cap generous headroom (8192) so output always fits,
-            //     even though thinkingBudget is sometimes ignored by the API.
-            // maxOutputTokens is a ceiling, not a reservation — short news
-            // outputs are billed at actual size, so the higher cap is free.
-            maxOutputTokens: opts?.maxTokens || 8192,
-            thinkingConfig: { thinkingBudget: 1024 },
-            ...(opts?.json ? { responseMimeType: 'application/json' } : {}),
-          },
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: opts?.json
+                ? 'You are a precise news analyst. Return only valid JSON.'
+                : 'You are a precise news analyst.',
+            },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: opts?.maxTokens || 8192,
+          stream: false,
+          // News extraction is narrow structured work. Disabling thinking keeps
+          // latency and output token spend predictable.
+          thinking: { type: 'disabled' },
+          ...(opts?.json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS),
       })
       if (!res.ok) {
         const errText = await res.text()
-        const msg = `Gemini ${res.status} (${model}): ${errText.slice(0, 150)}`
+        const msg = `DeepSeek ${res.status} (${model}): ${errText.slice(0, 150)}`
         // Retry on transient errors (503 overloaded, 429 rate limit, 5xx)
         if ((res.status >= 500 || res.status === 429) && attempt < MAX_ATTEMPTS_PER_MODEL) {
           const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)  // 1s
           console.warn(`[news-pipeline] ${model} attempt ${attempt}/${MAX_ATTEMPTS_PER_MODEL} got ${res.status}, retrying in ${backoffMs}ms`)
           await new Promise(r => setTimeout(r, backoffMs))
-          lastErr = new GeminiHttpError(msg, res.status)
+          lastErr = new DeepSeekHttpError(msg, res.status)
           continue
         }
-        throw new GeminiHttpError(msg, res.status)
+        throw new DeepSeekHttpError(msg, res.status)
       }
       const data = await res.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
+        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>
       }
-      const candidate = data.candidates?.[0]
-      const text = candidate?.content?.parts?.[0]?.text || ''
-      // Hard guard: if the model still hit the token ceiling (thinking budget is
-      // occasionally ignored by the API), the body is truncated. Do NOT return
-      // it — safeParseJson would "repair" the broken JSON and we'd silently
-      // store a half-written take. Throw so the caller falls through to the
-      // other model instead. Retrying the SAME model is pointless (same cap).
-      if (candidate?.finishReason === 'MAX_TOKENS') {
-        throw new Error(`Gemini ${model} hit MAX_TOKENS — output truncated (raise maxOutputTokens or lower thinkingBudget)`)
+      const choice = data.choices?.[0]
+      const text = choice?.message?.content || ''
+      // Hard guard: if the model hit the token ceiling, the body is truncated.
+      // Do NOT return it — safeParseJson would repair broken JSON and we would
+      // silently store a half-written take.
+      if (choice?.finish_reason === 'length') {
+        throw new Error(`DeepSeek ${model} hit token limit — output truncated`)
       }
+      if (!text.trim()) throw new Error(`DeepSeek ${model} returned empty content`)
       return text
     } catch (err) {
       lastErr = err
-      // MAX_TOKENS truncation won't improve by retrying the same model (same
-      // cap) — propagate immediately so the caller falls through to the other model.
-      if (err instanceof Error && err.message.includes('MAX_TOKENS')) throw err
+      // Token-limit truncation won't improve by retrying the same model with
+      // the same cap — propagate immediately so the caller falls through.
+      if (err instanceof Error && err.message.includes('token limit')) throw err
       // Network errors (fetch threw / timeout) — retry too
       if (attempt < MAX_ATTEMPTS_PER_MODEL) {
         const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
@@ -170,7 +174,7 @@ async function callGeminiModelAttempt(model: string, prompt: string, opts?: { js
       throw err
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(`Gemini ${model} exhausted retries`)
+  throw lastErr instanceof Error ? lastErr : new Error(`DeepSeek ${model} exhausted retries`)
 }
 
 export type RssItem = {
@@ -312,7 +316,7 @@ function stripCDATA(s: string): string {
   return s.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '')
 }
 
-// ─── Gemini extraction ──────────────────────────────────────────
+// ─── DeepSeek extraction ─────────────────────────────────────────
 
 export type ExtractedItem = {
   category:               'fundraising' | 'tech' | 'policy' | 'exit'
@@ -422,27 +426,27 @@ function safeParseJson<T>(raw: string): T | null {
   }
 }
 
-async function extractWithGemini(item: RssItem, scope: 'sea' | 'global', state?: RunState): Promise<ExtractedItem | null> {
+async function extractWithDeepSeek(item: RssItem, scope: 'sea' | 'global', state?: RunState): Promise<ExtractedItem | null> {
   try {
     const input = `TITLE: ${item.title}\n\nDESCRIPTION: ${item.description}\n\nSOURCE: ${item.source}`
-    const text = await callGeminiText(`${buildExtractionPrompt(scope)}\n\n${input}`, { json: true, maxTokens: 2048 }, state)
+    const text = await callDeepSeekText(`${buildExtractionPrompt(scope)}\n\n${input}`, { json: true, maxTokens: 2048 }, state)
     const parsed = safeParseJson<ExtractedItem>(text)
     if (!parsed) {
-      console.warn('[news-pipeline] parse failed. Raw Gemini output (first 200 chars):', text.slice(0, 200).replace(/\n/g, '\\n'))
+      console.warn('[news-pipeline] parse failed. Raw DeepSeek output (first 200 chars):', text.slice(0, 200).replace(/\n/g, '\\n'))
       return null
     }
     return parsed
   } catch (err) {
-    console.error('[news-pipeline] gemini extract failed for', item.title.slice(0, 50), err)
+    console.error('[news-pipeline] deepseek extract failed for', item.title.slice(0, 50), err)
     return null
   }
 }
 
 /**
- * Main entry: pull all sources, extract via Gemini, dedupe, insert into news_items.
+ * Main entry: pull all sources, extract via DeepSeek, dedupe, insert into news_items.
  * Returns counts for reporting.
  */
-// Title keywords that signal a roundup/aggregate (reject for FREE, before Gemini)
+// Title keywords that signal a roundup/aggregate (reject for FREE, before DeepSeek)
 const ROUNDUP_KEYWORDS = [
   'deal review', 'deals review', 'q1 20', 'q2 20', 'q3 20', 'q4 20',
   'year in review', 'annual review', 'barometer', 'roundup', 'round-up',
@@ -455,14 +459,14 @@ function normalizeTitle(t: string): string {
   return t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 80)
 }
 
-// Max Gemini calls per run — hard cap on how many candidates we extract.
+// Max DeepSeek calls per run — hard cap on how many candidates we extract.
 // Raised from 60: bounded concurrency makes a larger set fit comfortably,
 // and the wall-clock guard (below) is the real safety net against timeouts.
-const MAX_GEMINI_CALLS = 120
+const MAX_DEEPSEEK_CALLS = 120
 
-// How many Gemini extractions run concurrently. ~6 is a safe balance: a big
-// wall-clock speedup without hammering Gemini's per-minute rate limits.
-const GEMINI_CONCURRENCY = 6
+// How many DeepSeek extractions run concurrently. ~6 is a safe balance: a big
+// wall-clock speedup without hammering provider rate limits.
+const DEEPSEEK_CONCURRENCY = 6
 
 // Stop LAUNCHING new extractions once the run has been going this long. Each
 // in-flight item is independently bounded by the per-call timeout, so the
@@ -511,7 +515,7 @@ export async function runNewsPipeline(): Promise<{
   let fetched = 0, inserted = 0, skipped = 0, errors = 0
   let seaInserted = 0, globalInserted = 0
 
-  // Existing URLs (last 30 days) so we skip duplicates without a Gemini call
+  // Existing URLs (last 30 days) so we skip duplicates without a DeepSeek call
   const { data: existing } = await supabaseAdmin
     .from('news_items')
     .select('source_url')
@@ -520,7 +524,7 @@ export async function runNewsPipeline(): Promise<{
 
   const sevenDaysAgoMs = Date.now() - 7 * 86400 * 1000
 
-  // ── STAGE 1: fetch all feeds + pre-filter using FREE rss data (no Gemini) ──
+  // ── STAGE 1: fetch all feeds + pre-filter using FREE rss data (no DeepSeek) ──
   type Candidate = { item: RssItem; scope: 'sea' | 'global'; pubMs: number }
   const seaCandidates: Candidate[] = []
   const globalCandidates: Candidate[] = []
@@ -559,16 +563,16 @@ export async function runNewsPipeline(): Promise<{
   seaCandidates.sort((a, b) => b.pubMs - a.pubMs)
   globalCandidates.sort((a, b) => b.pubMs - a.pubMs)
 
-  const globalBudget = Math.min(globalCandidates.length, Math.floor(MAX_GEMINI_CALLS * 0.2))
-  const seaBudget = Math.min(seaCandidates.length, MAX_GEMINI_CALLS - globalBudget)
+  const globalBudget = Math.min(globalCandidates.length, Math.floor(MAX_DEEPSEEK_CALLS * 0.2))
+  const seaBudget = Math.min(seaCandidates.length, MAX_DEEPSEEK_CALLS - globalBudget)
   const workList: Candidate[] = [
     ...seaCandidates.slice(0, seaBudget),
     ...globalCandidates.slice(0, globalBudget),
   ]
 
-  console.log(`[news-pipeline] pre-filter done. candidates: sea=${seaCandidates.length} global=${globalCandidates.length}. Processing ${workList.length} (cap ${MAX_GEMINI_CALLS}).`)
+  console.log(`[news-pipeline] pre-filter done. candidates: sea=${seaCandidates.length} global=${globalCandidates.length}. Processing ${workList.length} (cap ${MAX_DEEPSEEK_CALLS}).`)
 
-  // ── STAGE 3: Gemini extraction (bounded concurrency + wall-clock guard) ──
+  // ── STAGE 3: DeepSeek extraction (bounded concurrency + wall-clock guard) ──
   // Process the work list with a small pool of concurrent workers instead of
   // one-at-a-time. The wall-clock guard stops launching NEW work before we
   // approach the 300s Vercel ceiling, and each in-flight call is bounded by
@@ -582,14 +586,14 @@ export async function runNewsPipeline(): Promise<{
   const handleCandidate = async ({ item, scope, pubMs }: Candidate): Promise<void> => {
     processed++
 
-    const extracted = await extractWithGemini(item, scope, runState)
+    const extracted = await extractWithDeepSeek(item, scope, runState)
     if (!extracted) { errors++; return }
 
     if (extracted.is_roundup) { skipped++; return }
     if (scope === 'sea' && !extracted.is_sea_relevant) { skipped++; return }
     if (scope === 'global' && !extracted.is_globally_interesting) { skipped++; return }
 
-    // Guard: a truncated/garbled Gemini reply can still parse (via safeParseJson's
+    // Guard: a truncated/garbled DeepSeek reply can still parse (via safeParseJson's
     // repair path) into an object whose AI fields are empty. Don't persist a
     // half-baked row — skip it and let the next cron retry the URL (RSS + URL
     // dedupe keep the pipeline idempotent, so nothing is lost permanently).
@@ -629,7 +633,7 @@ export async function runNewsPipeline(): Promise<{
     }
   }
 
-  await runPool(workList, GEMINI_CONCURRENCY, handleCandidate, () => {
+  await runPool(workList, DEEPSEEK_CONCURRENCY, handleCandidate, () => {
     if (Date.now() - pipelineStart > WALL_CLOCK_BUDGET_MS) { stoppedEarly = true; return true }
     return false
   })
@@ -705,7 +709,7 @@ Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat
 }`
 
   try {
-    const text = await callGeminiText(prompt, { json: true, maxTokens: 8192 })
+    const text = await callDeepSeekText(prompt, { json: true, maxTokens: 8192 })
     const parsed = safeParseJson<{ headline?: string; body?: string; takeaway?: string }>(text)
     if (!parsed || !parsed.body) {
       console.warn('[editors-take] parse failed or empty body. Raw:', text.slice(0, 200).replace(/\n/g, '\\n'))
@@ -719,7 +723,7 @@ Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat
     const content = [headline, body, takeaway].filter(Boolean).join('\n\n').slice(0, 3000)
     return { headline, body, takeaway, content }
   } catch (err) {
-    console.error('[editors-take] gemini failed:', err)
+    console.error('[editors-take] deepseek failed:', err)
     return null
   }
 }
@@ -728,7 +732,7 @@ Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat
 // Top Stories — categorized, AI-selected, with REAL source coverage.
 //
 // Hybrid: clustering finds candidates + the objective "N sources" signal,
-// then Gemini picks the single most important story per category and writes
+// then DeepSeek picks the single most important story per category and writes
 // the headline + "why it matters" (SEA-first). The chosen cluster's real
 // source list/coverage are attached — never invented by the model.
 // Generated + stored + approved alongside the Editor's Take.
@@ -798,10 +802,10 @@ ${candidateBlocks.join('\n\n')}`
     // 4 categories × (headline + why) — give it real headroom. At 2048 the
     // JSON truncated after the first 1-2 categories, dropping policy + exit
     // (they're last in the object). 8192 + bounded thinking fits all four.
-    const text = await callGeminiText(prompt, { json: true, maxTokens: 8192 }, makeRunState())
+    const text = await callDeepSeekText(prompt, { json: true, maxTokens: 8192 }, makeRunState())
     parsed = safeParseJson(text)
   } catch (err) {
-    console.error('[top-stories] gemini failed:', err)
+    console.error('[top-stories] deepseek failed:', err)
     return null
   }
   if (!parsed) { console.warn('[top-stories] parse failed'); return null }

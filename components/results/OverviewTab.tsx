@@ -1,5 +1,5 @@
 // components/results/OverviewTab.tsx
-import type { Dispatch, SetStateAction } from 'react'
+type OverviewTabId = 'overview' | 'deck' | 'market' | 'competitors' | 'investors'
 
 interface Props {
   submission:           Record<string, unknown>
@@ -7,7 +7,7 @@ interface Props {
   marketAnalysis:       Record<string, unknown> | null
   competitiveAnalysis:  Record<string, unknown> | null
   matchResults:         Record<string, unknown>[]
-  onTabChange:          Dispatch<SetStateAction<string>>
+  onTabChange:          (tab: OverviewTabId) => void
 }
 
 export default function OverviewTab({
@@ -20,7 +20,9 @@ export default function OverviewTab({
   const topFixes = fixes.filter(f => f.priority === 'critical').slice(0, 3)
   const tam      = marketAnalysis?.tam_usd as number | null
   const recPre   = marketAnalysis?.recommended_premoney as { low: number; high: number; rationale: string } | null
-  const moat     = competitiveAnalysis?.moat_scores as { overall: number } | null
+  const moatScores = competitiveAnalysis?.moat_scores as (Record<string, number> & { overall: number }) | null
+  const moat     = moatScores
+  const keyDifferentiators = (competitiveAnalysis?.key_differentiators as string[] | null) || []
   const top3     = matchResults.slice(0, 3)
 
   const scoreColor = !score ? 'text-text-disabled'
@@ -145,12 +147,12 @@ export default function OverviewTab({
       )}
 
       {/* Competitor summary */}
-      {competitiveAnalysis && competitiveAnalysis.moat_scores && (
+      {moatScores && (
         <div>
           <SectionTitle title="Competitive position" action="Full analysis →" onAction={() => onTabChange('competitors')} />
           <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4 mb-4">
-              {Object.entries((competitiveAnalysis.moat_scores as Record<string, number>) || {})
+              {Object.entries(moatScores)
                 .filter(([k]) => !['overall','actions'].includes(k))
                 .map(([key, val]) => (
                   <div key={key} className="text-center min-w-0">
@@ -160,11 +162,11 @@ export default function OverviewTab({
                 ))
               }
             </div>
-            {(competitiveAnalysis.key_differentiators as string[] || []).length > 0 && (
+            {keyDifferentiators.length > 0 && (
               <div>
                 <p className="text-xs text-text-tertiary font-medium mb-1.5">Key differentiators</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {(competitiveAnalysis.key_differentiators as string[]).map((d, i) => (
+                  {keyDifferentiators.map((d, i) => (
                     <span key={i} className="text-xs bg-success-bg text-success-text px-2 py-1 rounded-md">{d}</span>
                   ))}
                 </div>

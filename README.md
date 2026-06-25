@@ -14,15 +14,17 @@ npm run dev
 ## Setup order
 
 1. **Supabase**: Run `supabase/migrations/v2_schema.sql` in your Supabase SQL editor
-2. **Gemini API key**: Get free key at https://aistudio.google.com/app/apikey → add to `.env.local`
-3. **Google Drive**: Add OAuth credentials to `.env.local`
-4. **Run**: `npm install && npm run dev`
+2. **Gemini API key**: Used for deck analysis → add to `.env.local`
+3. **DeepSeek API key**: Used for the news pipeline → add to `.env.local`
+4. **Google Drive**: Add OAuth credentials to `.env.local`
+5. **Run**: `npm install && npm run dev`
 
 ## Stack
 
-- Next.js 14 (App Router) + TypeScript + Tailwind CSS
+- Next.js 15 (App Router) + TypeScript + Tailwind CSS
 - Supabase (Postgres + Auth)
-- Gemini 2.5 Flash (AI — replaces Claude)
+- Gemini 2.5 Flash (deck AI)
+- DeepSeek v4 Flash/Pro (news AI)
 - Google Drive (deck storage)
 - Render.com (deployment)
 

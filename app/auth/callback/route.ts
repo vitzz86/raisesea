@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const code = url.searchParams.get('code')
   const errorParam = url.searchParams.get('error')
   const errorDescription = url.searchParams.get('error_description')
-  const redirectTo = url.searchParams.get('redirectTo') || '/dashboard'
+  const redirectTo = safeRedirect(url.searchParams.get('redirectTo') || '/dashboard')
 
   // If OAuth provider returned an error (e.g. user cancelled), bounce back to login
   if (errorParam) {
@@ -108,4 +108,9 @@ export async function GET(req: NextRequest) {
 
   // Final redirect — to /dashboard by default, or wherever they tried to go
   return NextResponse.redirect(new URL(redirectTo, url.origin))
+}
+
+function safeRedirect(path: string): string {
+  if (!path.startsWith('/') || path.startsWith('//')) return '/dashboard'
+  return path
 }
