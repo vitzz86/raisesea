@@ -308,6 +308,69 @@ export interface DeckExtraction {
   }
 }
 
+const DEFAULT_EXTRACTION: DeckExtraction = {
+  company_name: 'Unknown company',
+  one_liner: 'No one-liner extracted.',
+  problem: 'Problem not clearly stated in the deck.',
+  solution: 'Solution not clearly stated in the deck.',
+  sector: 'Other',
+  stage: 'Seed',
+  business_model: 'Other',
+  founder_name: '',
+  founder_profile: 'Unknown',
+  current_mrr_usd: null,
+  annual_revenue_usd: null,
+  estimated_revenue_usd: null,
+  revenue_basis: null,
+  num_customers: null,
+  raise_target_usd: null,
+  traction: 'No traction extracted.',
+  team_summary: 'No team summary extracted.',
+  market_size: '',
+  sector_profile: {
+    primary_sector: 'Other',
+    sector_weights: { Other: 1 },
+    sub_categories: [],
+    secondary_sectors: [],
+  },
+}
+
+const EXTRACTION_PROMPT = `Extract only the key facts from this pitch deck. Return compact valid JSON only.
+Keep every string under 220 characters. Use short phrases, not paragraphs.
+{
+  "company_name": "",
+  "one_liner": "",
+  "problem": "",
+  "solution": "",
+  "sector": "AI/ML | Fintech | SaaS | E-commerce | D2C | Marketplace | Consumer | Healthtech | Biotech | Deep Tech | Manufacturing | Space | Cleantech | Agritech | Foodtech | Logistics | Mobility | Edtech | Proptech | Travel | Crypto/Web3 | Developer Tools | Cybersecurity | Gaming | Media | B2B | Insurtech | Regtech | Other",
+  "stage": "Pre-seed | Seed | Pre-series A | Series A | Series B | Series C+",
+  "business_model": "B2B | B2C | B2B2C | Marketplace | D2C | SaaS | Project/Contract | Other",
+  "founder_name": "",
+  "founder_profile": "",
+  "current_mrr_usd": null,
+  "annual_revenue_usd": null,
+  "estimated_revenue_usd": null,
+  "revenue_basis": null,
+  "num_customers": null,
+  "raise_target_usd": null,
+  "traction": "",
+  "team_summary": "",
+  "market_size": "",
+  "sector_profile": {
+    "primary_sector": "",
+    "sector_weights": {"Other": 1},
+    "sub_categories": [],
+    "secondary_sectors": []
+  }
+}
+
+Rules:
+- Extract only what is shown in the deck.
+- Revenue fields stay null unless explicit revenue or conservative deck-supported signals exist.
+- revenue_basis is required only when estimated_revenue_usd is not null.
+- sector_weights must sum to 1.0.
+- Do not include slide-by-slide notes, explanations, markdown, or extra keys.`
+
 export async function extractFromDeck(deckBase64: string, mimeType = 'application/pdf'): Promise<DeckExtraction> {
   // Tries primary model first; if all 5 retries exhaust, falls through to fallback.
   // Each model gets its own retry budget. Extraction is the most critical step
@@ -346,47 +409,13 @@ async function extractFromDeckAttempt(model: string, deckBase64: string, mimeTyp
                 }
               },
               {
-                text: `Analyze this pitch deck and extract structured data. Return ONLY valid JSON:
-{
-  "company_name": "company name",
-  "one_liner": "one sentence description of what they do",
-  "problem": "the core problem they solve",
-  "solution": "their solution approach",
-  "sector": "primary sector: AI/ML, Fintech, SaaS, E-commerce, D2C, Marketplace, Consumer, Healthtech, Biotech, Deep Tech, Manufacturing, Space, Cleantech, Agritech, Foodtech, Logistics, Mobility, Edtech, Proptech, Travel, Crypto/Web3, Developer Tools, Cybersecurity, Gaming, Media, B2B, Insurtech, Regtech, Other",
-  "stage": "Pre-seed, Seed, Pre-series A, Series A, Series B, Series C+",
-  "business_model": "B2B, B2C, B2B2C, Marketplace, D2C, SaaS, Project/Contract, Other",
-  "founder_name": "founder name(s)",
-  "founder_profile": "Technical founder, Domain expert, Serial entrepreneur, First-time founder, or combination",
-  "current_mrr_usd": null or integer USD monthly recurring revenue (null if not shown or not subscription-based),
-  "annual_revenue_usd": null or integer USD annual revenue/contract value (null if not disclosed),
-  "estimated_revenue_usd": null or integer USD estimated annual revenue based on deck signals when annual_revenue_usd is null. Use deck context to forecast: "20 paying customers × estimated $500/mo per customer (typical SaaS ACV in this sector) = $120,000/yr", or "3 enterprise pilots × $50K typical pilot value = $150K", or "5 named contracts × $30K average value = $150K". If genuinely pre-revenue (truly nothing — no customers, no pilots, no LOIs, no contracts), set to null.,
-  "revenue_basis": null or string explaining how estimated_revenue_usd was derived (e.g. "Derived from 20 paying customers × $500/mo estimated ACV based on Indonesian SaaS pricing benchmarks"). Required when estimated_revenue_usd is set.,
-  "num_customers": null or integer number of paying customers,
-  "raise_target_usd": null or integer raise amount in USD,
-  "traction": "description of traction, clients, metrics shown in deck",
-  "team_summary": "description of founding team and key members",
-  "market_size": "any market sizing data mentioned in the deck",
-  "sector_profile": {
-    "primary_sector": "main sector",
-    "sector_weights": {"AI/ML": 0.45, "SaaS": 0.30, "Deep Tech": 0.15, "Cleantech": 0.10},
-    "sub_categories": ["Computer Vision", "Asset Integrity", "Industrial AI"],
-    "secondary_sectors": ["SaaS", "Deep Tech"]
-  }
-}
-
-Rules:
-- current_mrr_usd: only fill if recurring subscription revenue explicitly shown. Null for project/contract businesses.
-- annual_revenue_usd: total annual revenue or contract value EXPLICITLY shown in deck. Null if not disclosed.
-- estimated_revenue_usd: ONLY use when annual_revenue_usd is null but the deck has SIGNALS that justify a forecast (customer count, named pilots, signed contracts, LOIs with values, etc.). Forecast conservatively. If genuinely nothing — pre-idea, pre-pilot, only TAM-side aspiration — leave as null. Pre-revenue is a real state, don't fabricate revenue out of nothing.
-- revenue_basis: REQUIRED when estimated_revenue_usd is set. Explain the calculation clearly so the founder can verify.
-- sector_weights must sum to 1.0
-- Be precise — only extract what is actually in the deck, do not invent data`
+                text: EXTRACTION_PROMPT
               }
             ]
           }],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 4096,
+            maxOutputTokens: 8192,
             responseMimeType: 'application/json',
           }
         })
@@ -408,14 +437,17 @@ Rules:
       const data = await res.json()
       const candidate = data.candidates?.[0]
       if (!candidate) throw new Error(`No candidates in Gemini deck extraction response (model=${model})`)
-      if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-        throw new Error(`Gemini deck extraction returned finishReason=${candidate.finishReason} (model=${model})`)
-      }
       const text = candidate.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
       if (!text) {
-        throw new Error(`Gemini deck extraction returned empty response (model=${model})`)
+        throw new Error(`Gemini deck extraction returned empty response (model=${model}, finishReason=${candidate.finishReason || 'none'})`)
       }
-      return parseJSON<DeckExtraction>(text)
+      if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+        if (candidate.finishReason !== 'MAX_TOKENS') {
+          throw new Error(`Gemini deck extraction returned finishReason=${candidate.finishReason} (model=${model})`)
+        }
+        console.warn(`[gemini-extract ${model}] returned MAX_TOKENS with text; attempting compact parse/repair`)
+      }
+      return normalizeExtraction(parseJSON<Partial<DeckExtraction>>(text))
     } catch (err) {
       lastErr = err
       if (attempt === maxAttempts) throw err
@@ -425,6 +457,88 @@ Rules:
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(`extractFromDeck failed after all retries (model=${model})`)
+}
+
+function normalizeExtraction(raw: Partial<DeckExtraction>): DeckExtraction {
+  const sectorProfile = raw.sector_profile || DEFAULT_EXTRACTION.sector_profile
+  const primarySector = truncateString(
+    sectorProfile.primary_sector || raw.sector || DEFAULT_EXTRACTION.sector_profile.primary_sector,
+    80
+  )
+
+  return {
+    company_name: truncateString(raw.company_name || DEFAULT_EXTRACTION.company_name),
+    one_liner: truncateString(raw.one_liner || DEFAULT_EXTRACTION.one_liner),
+    problem: truncateString(raw.problem || DEFAULT_EXTRACTION.problem),
+    solution: truncateString(raw.solution || DEFAULT_EXTRACTION.solution),
+    sector: truncateString(raw.sector || primarySector || DEFAULT_EXTRACTION.sector, 80),
+    stage: truncateString(raw.stage || DEFAULT_EXTRACTION.stage, 40),
+    business_model: truncateString(raw.business_model || DEFAULT_EXTRACTION.business_model, 60),
+    founder_name: truncateString(raw.founder_name || DEFAULT_EXTRACTION.founder_name, 120),
+    founder_profile: truncateString(raw.founder_profile || DEFAULT_EXTRACTION.founder_profile, 160),
+    current_mrr_usd: nullableNumber(raw.current_mrr_usd),
+    annual_revenue_usd: nullableNumber(raw.annual_revenue_usd),
+    estimated_revenue_usd: nullableNumber(raw.estimated_revenue_usd),
+    revenue_basis: raw.revenue_basis ? truncateString(raw.revenue_basis, 220) : null,
+    num_customers: nullableNumber(raw.num_customers),
+    raise_target_usd: nullableNumber(raw.raise_target_usd),
+    traction: truncateString(raw.traction || DEFAULT_EXTRACTION.traction),
+    team_summary: truncateString(raw.team_summary || DEFAULT_EXTRACTION.team_summary),
+    market_size: truncateString(raw.market_size || DEFAULT_EXTRACTION.market_size),
+    sector_profile: {
+      primary_sector: primarySector,
+      sector_weights: normalizeSectorWeights(sectorProfile.sector_weights, primarySector),
+      sub_categories: normalizeStringArray(sectorProfile.sub_categories, 5),
+      secondary_sectors: normalizeStringArray(sectorProfile.secondary_sectors, 4),
+    },
+  }
+}
+
+function truncateString(value: unknown, max = 220): string {
+  const text = typeof value === 'string' ? value.trim() : String(value || '').trim()
+  if (!text) return ''
+  return text.length > max ? `${text.slice(0, max - 3).trim()}...` : text
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+
+  const raw = value.trim().toLowerCase()
+  if (!raw || raw === 'null' || raw === 'n/a' || raw === 'unknown') return null
+
+  const numeric = Number(raw.replace(/[^0-9.-]/g, ''))
+  if (!Number.isFinite(numeric)) return null
+
+  if (/\b(bn|billion)\b/.test(raw)) return numeric * 1_000_000_000
+  if (/\b(m|mn|million)\b/.test(raw)) return numeric * 1_000_000
+  if (/\b(k|thousand)\b/.test(raw)) return numeric * 1_000
+  return numeric
+}
+
+function normalizeStringArray(value: unknown, maxItems: number): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => truncateString(item, 80))
+    .filter(Boolean)
+    .slice(0, maxItems)
+}
+
+function normalizeSectorWeights(value: unknown, fallbackSector: string): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { [fallbackSector || 'Other']: 1 }
+  }
+
+  const entries = Object.entries(value)
+    .map(([sector, weight]) => [truncateString(sector, 80), nullableNumber(weight)] as const)
+    .filter((entry): entry is readonly [string, number] => Boolean(entry[0]) && entry[1] !== null && entry[1] > 0)
+
+  if (entries.length === 0) return { [fallbackSector || 'Other']: 1 }
+
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0)
+  if (total <= 0) return { [fallbackSector || 'Other']: 1 }
+
+  return Object.fromEntries(entries.map(([sector, weight]) => [sector, Number((weight / total).toFixed(4))]))
 }
 
 // ═══════════════════════════════════════════════════════════════
