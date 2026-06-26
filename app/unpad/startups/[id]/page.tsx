@@ -19,7 +19,8 @@ import {
   Users,
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../../UnpadShell'
-import { getStartup, startups, type MilestoneStatus, type StartupStatus } from '../../data'
+import { fetchUnpadStartup, requireUnpadOperator } from '../../incubator'
+import type { MilestoneStatus, StartupStatus } from '../../data'
 
 type StartupPageProps = {
   params: Promise<{ id: string }>
@@ -41,28 +42,21 @@ const milestoneTone: Record<MilestoneStatus, string> = {
   todo: 'bg-[#eef2f7] text-[#31506f]',
 }
 
-export function generateStaticParams() {
-  return startups.map(startup => ({ id: startup.id }))
-}
+export const dynamic = 'force-dynamic'
 
-export async function generateMetadata({ params }: StartupPageProps): Promise<Metadata> {
-  const { id } = await params
-  const startup = getStartup(id)
-
-  return {
-    title: startup ? `${startup.name} Progress — Unpad x RaiseSEA` : 'Startup Progress — Unpad x RaiseSEA',
-    description: startup
-      ? `Progress workspace for ${startup.name}, including deck score history, mentor annotations, and milestones.`
-      : 'Unpad startup progress workspace.',
-  }
+export const metadata: Metadata = {
+  title: 'Startup Progress — Unpad x RaiseSEA',
+  description: 'Unpad startup progress workspace with deck score history, mentor prompts, and milestones.',
 }
 
 export default async function UnpadStartupPage({ params }: StartupPageProps) {
+  await requireUnpadOperator('/unpad')
   const { id } = await params
-  const startup = getStartup(id)
+  const { startup, versions, schemaReady, error } = await fetchUnpadStartup(id)
   if (!startup) notFound()
 
-  const deckDelta = startup.deckScore - startup.previousDeckScore
+  const deckDelta = startup.latestDelta ?? 0
+  const milestones = buildMilestones(startup.latestVersion, startup.nextMilestone)
 
   return (
     <UnpadShell
@@ -84,6 +78,12 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
       }
     >
       <section className="grid lg:grid-cols-[1.35fr_.75fr] gap-5">
+        {!schemaReady && (
+          <div className="lg:col-span-2 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-4 text-sm text-[#991b1b]">
+            Run `supabase/migrations/v22_incubator_unpad_workspace.sql` in Supabase before using this page. {error ? `Current error: ${error}` : ''}
+          </div>
+        )}
+
         <div className="bg-white border border-[#d9dfd2] rounded-lg p-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
@@ -93,7 +93,9 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
               </div>
               <h2 className="text-xl font-semibold text-[#102033] mt-4">Progress score {startup.progressScore}/100</h2>
               <p className="text-sm text-[#687468] leading-relaxed mt-2 max-w-2xl">
-                Latest deck upload and mentor review show the team is moving toward {startup.nextMilestone.toLowerCase()}.
+                {startup.deckScore == null
+                  ? 'No deck has been uploaded yet. Upload the first deck to create the baseline.'
+                  : `Latest deck upload shows the team is moving toward ${startup.nextMilestone.toLowerCase()}.`}
               </p>
             </div>
             <div className="text-right">
@@ -114,9 +116,9 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
             <ScoreCard
               icon={<FileText className="w-4 h-4" strokeWidth={1.75} />}
               label="Latest deck score"
-              value={`${startup.deckScore}/100`}
-              detail={`${deckDelta >= 0 ? '+' : ''}${deckDelta} from prior deck`}
-              valueNumber={startup.deckScore}
+              value={startup.deckScore == null ? 'No deck' : `${startup.deckScore}/100`}
+              detail={startup.previousDeckScore == null ? 'Baseline pending' : `${deckDelta >= 0 ? '+' : ''}${deckDelta} from prior deck`}
+              valueNumber={startup.deckScore ?? 0}
               tone="gold"
             />
             <ScoreCard
@@ -141,7 +143,7 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
             ].map(([title, description]) => (
               <Link
                 key={title}
-                href={title.includes('pitch') ? '/mock-pitch' : title.includes('deck') ? '/apply' : '#mentor-notes'}
+                href={title.includes('pitch') ? '/mock-pitch' : title.includes('deck') ? '/unpad/upload' : '#mentor-notes'}
                 className="block rounded-md border border-white/15 bg-white/5 p-3 hover:bg-white/10 transition-colors"
               >
                 <div className="flex items-center justify-between gap-3">
@@ -157,8 +159,13 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
 
       <section className="mt-8 grid lg:grid-cols-[1fr_.85fr] gap-5">
         <Panel title="Deck versions over time" icon={<Presentation className="w-4 h-4" strokeWidth={1.75} />}>
-          <div className="space-y-3">
-            {startup.deckVersions.map((deck, index) => (
+          {versions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-[#d9dfd2] p-6 text-sm text-[#687468] text-center">
+              No decks uploaded yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {versions.map((deck, index) => (
               <div key={deck.version} className="border border-[#e3e8df] rounded-lg p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -166,34 +173,44 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
                     <div className="text-xs text-[#687468] mt-1">{deck.uploadedAt} · Focus: {deck.focus}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-semibold text-[#102033]">{deck.score}</div>
+                    <div className="text-xl font-semibold text-[#102033]">{deck.score ?? '—'}</div>
                     <div className="text-[11px] text-[#687468]">deck score</div>
                   </div>
                 </div>
                 <p className="text-sm text-[#425246] leading-relaxed mt-3">{deck.summary}</p>
                 <div className="mt-4 flex items-center gap-3">
-                  <ScoreBar value={deck.score} tone={index === 0 ? 'green' : 'blue'} />
+                  <ScoreBar value={deck.score ?? 0} tone={index === 0 ? 'green' : 'blue'} />
                   <span className="text-xs text-[#687468] shrink-0">
-                    {deck.previousScore ? `${deck.score - deck.previousScore >= 0 ? '+' : ''}${deck.score - deck.previousScore}` : 'baseline'}
+                    {deck.scoreDelta == null ? 'baseline' : `${deck.scoreDelta >= 0 ? '+' : ''}${deck.scoreDelta}`}
                   </span>
                 </div>
+                {deck.submissionSlug && (
+                  <Link href={`/match/${deck.submissionSlug}`} className="mt-3 inline-flex text-xs font-medium text-[#1a4d2e] hover:underline">
+                    Open full analysis
+                  </Link>
+                )}
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Panel>
 
         <Panel id="mentor-notes" title="Mentor annotations" icon={<MessageSquareText className="w-4 h-4" strokeWidth={1.75} />}>
           <div className="space-y-3">
-            {startup.comments.map(comment => (
-              <div key={`${comment.author}-${comment.date}`} className="border-b border-[#edf0ea] last:border-0 pb-3 last:pb-0">
+            {versions.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[#d9dfd2] p-6 text-sm text-[#687468] text-center">
+                Mentor prompts appear after the first deck analysis.
+              </div>
+            ) : versions.map(deck => (
+              <div key={deck.id} className="border-b border-[#edf0ea] last:border-0 pb-3 last:pb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-[#102033]">{comment.author}</div>
-                    <div className="text-[11px] text-[#687468]">{comment.role} · {comment.date}</div>
+                    <div className="text-sm font-semibold text-[#102033]">{startup.mentor}</div>
+                    <div className="text-[11px] text-[#687468]">Mentor prompt · {deck.uploadedAt}</div>
                   </div>
-                  <span className="text-[10px] font-semibold rounded bg-[#eef4ef] text-[#1a4d2e] px-1.5 py-0.5">{comment.area}</span>
+                  <span className="text-[10px] font-semibold rounded bg-[#eef4ef] text-[#1a4d2e] px-1.5 py-0.5">{deck.version}</span>
                 </div>
-                <p className="text-sm text-[#425246] leading-relaxed mt-3">{comment.body}</p>
+                <p className="text-sm text-[#425246] leading-relaxed mt-3">{deck.mentorPrompt}</p>
               </div>
             ))}
           </div>
@@ -203,7 +220,7 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
       <section className="mt-8 grid lg:grid-cols-[.9fr_1.1fr] gap-5">
         <Panel title="Milestone tracker" icon={<CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}>
           <div className="space-y-3">
-            {startup.milestones.map(milestone => (
+            {milestones.map(milestone => (
               <div key={milestone.title} className="flex gap-3">
                 <div className="pt-0.5">
                   {milestone.status === 'done' ? (
@@ -231,7 +248,7 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
         <Panel title="Founder workspace shortcuts" icon={<Users className="w-4 h-4" strokeWidth={1.75} />}>
           <div className="grid sm:grid-cols-2 gap-3">
             {[
-              { title: 'Upload improved deck', description: 'Creates the next score point in this progress timeline.', href: '/apply', icon: FileText },
+              { title: 'Upload improved deck', description: 'Creates the next score point in this progress timeline.', href: '/unpad/upload', icon: FileText },
               { title: 'Practice Q&A', description: 'Use mock pitch to prepare for mentor and investor questions.', href: '/mock-pitch', icon: Mic },
               { title: 'Update investor CRM', description: 'Track warm introductions, next actions, and follow-ups.', href: '/crm', icon: Users },
               { title: 'Post mentor note', description: 'Add slide-level annotations and founder-facing comments.', href: '#mentor-notes', icon: PencilLine },
@@ -308,4 +325,27 @@ function Panel({ id, title, icon, children }: {
       {children}
     </div>
   )
+}
+
+function buildMilestones(latestVersion: number, nextMilestone: string) {
+  return [
+    {
+      title: latestVersion > 0 ? `Deck v${latestVersion} analysis completed` : 'Upload first deck',
+      owner: 'Unpad operator',
+      due: latestVersion > 0 ? 'Done' : 'Now',
+      status: latestVersion > 0 ? 'done' : 'active',
+    },
+    {
+      title: nextMilestone,
+      owner: 'Assigned mentor',
+      due: 'Next review',
+      status: latestVersion > 0 ? 'active' : 'todo',
+    },
+    {
+      title: 'Upload revised deck after mentor feedback',
+      owner: 'Startup founder',
+      due: 'Next sprint',
+      status: 'todo',
+    },
+  ] as Array<{ title: string; owner: string; due: string; status: MilestoneStatus }>
 }

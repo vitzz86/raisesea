@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn'
 import { unpadCoreTools, unpadNavItems } from './data'
 
 type UnpadShellProps = {
-  active: 'dashboard' | 'insights' | 'announcements'
+  active: 'dashboard' | 'upload' | 'insights' | 'announcements'
   eyebrow?: string
   title: string
   subtitle: string

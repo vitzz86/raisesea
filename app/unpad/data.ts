@@ -10,6 +10,7 @@ import {
   MessageSquareText,
   Presentation,
   Target,
+  UploadCloud,
   Users,
 } from 'lucide-react'
 
@@ -65,6 +66,7 @@ export type UnpadStartup = {
 
 export const unpadNavItems = [
   { key: 'dashboard', label: 'Dashboard', href: '/unpad', icon: LayoutDashboard },
+  { key: 'upload', label: 'Deck upload', href: '/unpad/upload', icon: UploadCloud },
   { key: 'insights', label: 'Insights', href: '/unpad/insights', icon: BookOpen },
   { key: 'announcements', label: 'Announcements', href: '/unpad/announcements', icon: Megaphone },
 ]

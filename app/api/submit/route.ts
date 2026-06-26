@@ -17,6 +17,13 @@ import {
   monthlyLimitMessage,
   normalizeSha256,
 } from '@/lib/usage-limits'
+import {
+  findExistingIncubatorDeck,
+  parseIncubatorPayload,
+  recordIncubatorDeckProgress,
+  resolveIncubatorStartup,
+  type IncubatorDeckProgressResult,
+} from '@/lib/incubator-progress'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,14 +58,13 @@ export async function POST(req: NextRequest) {
     const raiseTargetStr    = (body.raise_target_usd    as string) || ''
     const businessModel     = (body.business_model      as string) || ''
     const founderName       = (body.founder_name        as string) || ''
-    // Authenticated user's email always wins. Body value used only when
-    // there's no session (legacy/anonymous path).
-    const founderEmail      = sessionUser?.email || ((body.founder_email as string) || '')
+    const bodyFounderEmail  = (body.founder_email       as string) || ''
     const founderLinkedin   = (body.founder_linkedin    as string) || ''
     const currentInvestors  = (body.current_investors   as string) || ''
     const storagePath       = (body.storage_path        as string) || ''
     const uniqueSlug        = (body.slug                as string) || ''
     const clientDeckSha256  = normalizeSha256(body.deck_sha256)
+    const incubatorPayload  = parseIncubatorPayload(body, sessionUser)
 
     // Normalize stage + sector to canonical strings so all downstream lookups
     // (matching's STAGE_LEVEL, intelligence-db's VALUATION_BY_SECTOR/MARKET_SIZES) match.
@@ -66,6 +72,21 @@ export async function POST(req: NextRequest) {
     const sector = canonicalSector(sectorRaw)
 
     const raiseTarget = parseInt(raiseTargetStr || '0')
+    const bypassFreeLimits = await canBypassFreeLimits(sessionUser)
+
+    if (incubatorPayload && (!sessionUser || !bypassFreeLimits)) {
+      return NextResponse.json(
+        { error: 'Only super admins can upload decks for the Unpad incubator workspace.' },
+        { status: 403 }
+      )
+    }
+
+    // Authenticated user's email wins for normal founder uploads. For super-admin
+    // incubator operator uploads, the founder email belongs to the startup being
+    // onboarded, not the operator.
+    const founderEmail = incubatorPayload
+      ? bodyFounderEmail
+      : sessionUser?.email || bodyFounderEmail
 
     if (!founderEmail || !companyName || !storagePath || !uniqueSlug) {
       return NextResponse.json(
@@ -86,8 +107,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const bypassFreeLimits = await canBypassFreeLimits(sessionUser)
     let deckHashColumnAvailable = true
+    let incubatorStartupId: string | null = null
+    let incubatorProgress: IncubatorDeckProgressResult | null = null
+
+    if (incubatorPayload) {
+      incubatorStartupId = await resolveIncubatorStartup(incubatorPayload)
+    }
 
     if (sessionUser && !bypassFreeLimits) {
       const usageWindow = currentUsageWindow()
@@ -165,6 +191,22 @@ export async function POST(req: NextRequest) {
             existing_submission_id: existing.id,
             existing_slug: existing.unique_slug,
             existing_url: `/match/${existing.unique_slug}`,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
+    if (incubatorStartupId && deckSha256) {
+      const existingIncubatorDeck = await findExistingIncubatorDeck(incubatorStartupId, deckSha256)
+      if (existingIncubatorDeck) {
+        await deleteDeck(storagePath)
+        return NextResponse.json(
+          {
+            error: `This same deck is already recorded as Deck v${existingIncubatorDeck.version} for this Unpad startup. Upload a revised PDF to create progress.`,
+            code: 'DUPLICATE_INCUBATOR_DECK',
+            existing_url: existingIncubatorDeck.submissionSlug ? `/match/${existingIncubatorDeck.submissionSlug}` : null,
+            existing_version: existingIncubatorDeck.version,
           },
           { status: 409 }
         )
@@ -314,6 +356,11 @@ export async function POST(req: NextRequest) {
       status:                 'matched',
     }
 
+    if (incubatorPayload && incubatorStartupId) {
+      submissionPayload.institution_slug = incubatorPayload.institutionSlug
+      submissionPayload.incubator_startup_id = incubatorStartupId
+    }
+
     if (deckSha256 && deckHashColumnAvailable) {
       submissionPayload.deck_sha256 = deckSha256
     }
@@ -336,6 +383,17 @@ export async function POST(req: NextRequest) {
     const { data: submission, error: subErr } = submissionResult
 
     if (subErr) throw subErr
+
+    if (incubatorPayload && incubatorStartupId && fullAnalysis?.deck_analysis) {
+      incubatorProgress = await recordIncubatorDeckProgress({
+        institutionSlug: incubatorPayload.institutionSlug,
+        startupId: incubatorStartupId,
+        submissionId: submission.id,
+        deckSha256,
+        deckAnalysis: fullAnalysis?.deck_analysis || null,
+        createdBy: sessionUser?.id,
+      })
+    }
 
     // ── 11. Feed the learning flywheel (non-blocking) ───────
     if (fullAnalysis?.deck_analysis) {
@@ -362,6 +420,9 @@ export async function POST(req: NextRequest) {
       redirect_url:  `/match/${submission.unique_slug}`,
       top_match:     topMatches[0]?.investor?.name || null,
       analysis_done: !!fullAnalysis,
+      incubator_startup_id: incubatorProgress?.startupId || incubatorStartupId,
+      deck_version: incubatorProgress?.version || null,
+      deck_score_delta: incubatorProgress?.scoreDelta ?? null,
     })
 
   } catch (err) {

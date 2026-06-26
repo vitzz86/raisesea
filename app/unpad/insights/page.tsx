@@ -15,14 +15,19 @@ import {
   Users,
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../UnpadShell'
-import { average, insights, startups } from '../data'
+import { insights } from '../data'
+import { average, fetchUnpadStartups, requireUnpadOperator } from '../incubator'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Unpad Insights — RaiseSEA',
   description: 'Unpad admin content hub for cohort materials, founder resources, and startup development insights.',
 }
 
-export default function UnpadInsightsPage() {
+export default async function UnpadInsightsPage() {
+  await requireUnpadOperator('/unpad/insights')
+  const { startups } = await fetchUnpadStartups()
   const avgReadRate = average(insights.map(item => item.readRate))
   const lowReadInsight = insights.reduce((lowest, item) => item.readRate < lowest.readRate ? item : lowest, insights[0])
   const researchStartups = startups.filter(startup => ['Biotech', 'Deep Tech', 'Healthtech'].includes(startup.sector)).length

@@ -15,7 +15,10 @@ import {
   Users,
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from './UnpadShell'
-import { activity, announcements, average, insights, startups, statusColumns, type StartupStatus } from './data'
+import { announcements, insights, statusColumns, type StartupStatus } from './data'
+import { average, fetchUnpadStartups, requireUnpadOperator } from './incubator'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Unpad Incubator Workspace — RaiseSEA',
@@ -50,11 +53,21 @@ function ScoreBar({ value, tone = 'green' }: { value: number; tone?: 'green' | '
   )
 }
 
-export default function UnpadDashboardPage() {
+export default async function UnpadDashboardPage() {
+  await requireUnpadOperator('/unpad')
+  const { startups, schemaReady, error } = await fetchUnpadStartups()
   const activeStartups = startups.filter(s => ['Accepted', 'Incubating', 'Demo Day Ready'].includes(s.status)).length
   const avgProgress = average(startups.map(s => s.progressScore))
-  const avgDeck = average(startups.map(s => s.deckScore))
+  const avgDeck = average(startups.map(s => s.deckScore).filter((score): score is number => score != null))
   const pendingReviews = startups.filter(s => s.risk !== 'Low' || s.status === 'Screening').length
+  const recentActivity = startups
+    .filter(startup => startup.latestVersion > 0)
+    .slice(0, 4)
+    .map(startup => ({
+      icon: FileText,
+      text: `${startup.name} added Deck v${startup.latestVersion}${startup.latestDelta == null ? '' : ` (${startup.latestDelta >= 0 ? '+' : ''}${startup.latestDelta} pts)`}.`,
+      time: startup.lastActivity,
+    }))
 
   return (
     <UnpadShell
@@ -67,13 +80,19 @@ export default function UnpadDashboardPage() {
             <Megaphone className="w-4 h-4" strokeWidth={1.75} />
             New announcement
           </WorkspaceButton>
-          <WorkspaceButton href="/apply">
+          <WorkspaceButton href="/unpad/upload">
             <Plus className="w-4 h-4" strokeWidth={1.75} />
             Add deck
           </WorkspaceButton>
         </>
       }
     >
+      {!schemaReady && (
+        <div className="mb-5 rounded-lg border border-[#fecaca] bg-[#fef2f2] p-4 text-sm text-[#991b1b]">
+          Run `supabase/migrations/v22_incubator_unpad_workspace.sql` in Supabase before using the real Unpad workspace. {error ? `Current error: ${error}` : ''}
+        </div>
+      )}
+
       <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <MetricCard icon={<Users className="w-4 h-4" strokeWidth={1.75} />} label="Active startups" value={activeStartups.toString()} detail={`${startups.length} total in Batch A`} />
         <MetricCard icon={<TrendingUp className="w-4 h-4" strokeWidth={1.75} />} label="Avg progress score" value={`${avgProgress}/100`} detail="+9 points across latest deck uploads" accent="blue" />
@@ -97,8 +116,21 @@ export default function UnpadDashboardPage() {
             </Link>
           </div>
 
-          <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3">
-            {statusColumns.map(status => {
+          {startups.length === 0 ? (
+            <div className="bg-white border border-dashed border-[#d9dfd2] rounded-lg p-8 text-center">
+              <FileText className="w-8 h-8 text-[#9aa69b] mx-auto" strokeWidth={1.75} />
+              <h2 className="text-base font-semibold text-[#102033] mt-3">No Unpad startups yet</h2>
+              <p className="text-sm text-[#687468] mt-2 max-w-md mx-auto">
+                Add the first startup deck through the operator upload flow. The dashboard will populate from real Supabase records after analysis finishes.
+              </p>
+              <Link href="/unpad/upload" className="mt-4 h-9 inline-flex items-center justify-center gap-2 rounded-md bg-[#1a4d2e] text-white px-4 text-sm font-medium hover:bg-[#153f26]">
+                Add first deck
+                <ArrowRight className="w-4 h-4" strokeWidth={1.75} />
+              </Link>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-3">
+              {statusColumns.map(status => {
               const columnStartups = startups.filter(startup => startup.status === status)
               return (
                 <div key={status} className="bg-white border border-[#d9dfd2] rounded-lg min-h-[220px]">
@@ -133,14 +165,19 @@ export default function UnpadDashboardPage() {
                   </div>
                 </div>
               )
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         <aside className="space-y-5">
           <Panel title="Recent mentor activity" icon={<MessageSquareText className="w-4 h-4" strokeWidth={1.75} />}>
             <div className="space-y-3">
-              {activity.map(item => {
+              {recentActivity.length === 0 ? (
+                <div className="rounded-md border border-dashed border-[#d9dfd2] p-4 text-xs text-[#687468] text-center">
+                  No deck activity yet.
+                </div>
+              ) : recentActivity.map(item => {
                 const Icon = item.icon
                 return (
                   <div key={item.text} className="flex gap-3">
@@ -197,7 +234,13 @@ export default function UnpadDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#edf0ea]">
-              {startups.map(startup => (
+              {startups.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-8 text-center text-sm text-[#687468]" colSpan={7}>
+                    No startup submissions yet. Use the Unpad deck upload flow to create the first record.
+                  </td>
+                </tr>
+              ) : startups.map(startup => (
                 <tr key={startup.id} className="hover:bg-[#fbfcfa]">
                   <td className="px-4 py-3">
                     <Link href={`/unpad/startups/${startup.id}`} className="font-semibold text-[#102033] hover:text-[#1a4d2e]">{startup.name}</Link>
@@ -213,8 +256,10 @@ export default function UnpadDashboardPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-xs font-semibold text-[#102033]">{startup.deckScore}/100</div>
-                    <div className="text-[11px] text-[#1d5a3a]">+{startup.deckScore - startup.previousDeckScore} since previous</div>
+                    <div className="text-xs font-semibold text-[#102033]">{startup.deckScore != null ? `${startup.deckScore}/100` : 'No deck yet'}</div>
+                    <div className="text-[11px] text-[#1d5a3a]">
+                      {startup.latestDelta == null ? 'baseline pending' : `${startup.latestDelta >= 0 ? '+' : ''}${startup.latestDelta} since previous`}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#687468]">{startup.mentor}</td>
                   <td className="px-4 py-3 text-xs text-[#102033] max-w-[240px]">{startup.nextMilestone}</td>
@@ -247,12 +292,10 @@ export default function UnpadDashboardPage() {
 
         <Panel title="This week" icon={<CalendarDays className="w-4 h-4" strokeWidth={1.75} />}>
           <div className="space-y-3">
-            {[
-              ['Jun 28', 'Channel economics review', 'Naroma Indonesia'],
-              ['Jun 30', 'Regulatory pathway memo', 'KOKRO'],
-              ['Jul 1', 'Investor CRM shortlist review', 'RHEA'],
-              ['Jul 8', 'Demo Day deck vFinal due', 'All demo teams'],
-            ].map(([date, title, owner]) => (
+            {(startups.length > 0
+              ? startups.slice(0, 4).map(startup => [startup.lastActivity, startup.nextMilestone, startup.name])
+              : [['Now', 'Upload the first startup deck', 'Unpad operator']]
+            ).map(([date, title, owner]) => (
               <div key={title} className="flex gap-3">
                 <div className="w-12 text-[11px] font-semibold text-[#1d5a3a] shrink-0">{date}</div>
                 <div>

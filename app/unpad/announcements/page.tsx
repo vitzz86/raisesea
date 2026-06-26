@@ -14,14 +14,19 @@ import {
   Users,
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../UnpadShell'
-import { announcements, startups } from '../data'
+import { announcements } from '../data'
+import { fetchUnpadStartups, requireUnpadOperator } from '../incubator'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Unpad Announcements — RaiseSEA',
   description: 'Unpad announcement center for cohort updates, mentor reminders, and incubator deadlines.',
 }
 
-export default function UnpadAnnouncementsPage() {
+export default async function UnpadAnnouncementsPage() {
+  await requireUnpadOperator('/unpad/announcements')
+  const { startups } = await fetchUnpadStartups()
   const demoReadyCount = startups.filter(startup => startup.status === 'Demo Day Ready').length
   const incubatingCount = startups.filter(startup => startup.status === 'Incubating').length
   const mentorReviewCount = startups.filter(startup => startup.risk !== 'Low').length
