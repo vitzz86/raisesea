@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../UnpadShell'
 import { insights } from '../data'
-import { average, fetchUnpadStartups, requireUnpadOperator } from '../incubator'
+import { average, fetchUnpadStartups } from '../incubator'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +26,6 @@ export const metadata: Metadata = {
 }
 
 export default async function UnpadInsightsPage() {
-  await requireUnpadOperator('/unpad/insights')
   const { startups } = await fetchUnpadStartups()
   const avgReadRate = average(insights.map(item => item.readRate))
   const lowReadInsight = insights.reduce((lowest, item) => item.readRate < lowest.readRate ? item : lowest, insights[0])

@@ -19,7 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../../UnpadShell'
-import { fetchUnpadStartup, requireUnpadOperator } from '../../incubator'
+import { fetchUnpadStartup } from '../../incubator'
 import type { IncubatorDeckVersionView } from '../../incubator'
 import type { MilestoneStatus, StartupStatus } from '../../data'
 
@@ -51,7 +51,6 @@ export const metadata: Metadata = {
 }
 
 export default async function UnpadStartupPage({ params }: StartupPageProps) {
-  await requireUnpadOperator('/unpad')
   const { id } = await params
   const { startup, versions, schemaReady, error } = await fetchUnpadStartup(id)
   if (!startup) notFound()

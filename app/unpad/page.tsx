@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from './UnpadShell'
 import { announcements, insights, statusColumns, type StartupStatus } from './data'
-import { average, fetchUnpadStartups, requireUnpadOperator } from './incubator'
+import { average, fetchUnpadStartups } from './incubator'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +54,6 @@ function ScoreBar({ value, tone = 'green' }: { value: number; tone?: 'green' | '
 }
 
 export default async function UnpadDashboardPage() {
-  await requireUnpadOperator('/unpad')
   const { startups, schemaReady, error } = await fetchUnpadStartups()
   const activeStartups = startups.filter(s => ['Accepted', 'Incubating', 'Demo Day Ready'].includes(s.status)).length
   const avgProgress = average(startups.map(s => s.progressScore))

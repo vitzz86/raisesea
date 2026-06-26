@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../UnpadShell'
 import { announcements } from '../data'
-import { fetchUnpadStartups, requireUnpadOperator } from '../incubator'
+import { fetchUnpadStartups } from '../incubator'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +25,6 @@ export const metadata: Metadata = {
 }
 
 export default async function UnpadAnnouncementsPage() {
-  await requireUnpadOperator('/unpad/announcements')
   const { startups } = await fetchUnpadStartups()
   const demoReadyCount = startups.filter(startup => startup.status === 'Demo Day Ready').length
   const incubatingCount = startups.filter(startup => startup.status === 'Incubating').length

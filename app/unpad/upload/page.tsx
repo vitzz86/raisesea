@@ -1,18 +1,17 @@
 import type { Metadata } from 'next'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { UnpadShell, WorkspaceButton } from '../UnpadShell'
-import { fetchUnpadStartups, requireUnpadOperator } from '../incubator'
+import { fetchUnpadStartups } from '../incubator'
 import UploadSimulation from './UploadSimulation'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Unpad Deck Upload — RaiseSEA',
-  description: 'Super-admin Unpad startup deck upload with real RaiseSEA analysis and progress tracking.',
+  description: 'Unpad startup deck upload demo with real RaiseSEA analysis and progress tracking.',
 }
 
 export default async function UnpadUploadPage() {
-  await requireUnpadOperator('/unpad/upload')
   const { startups, schemaReady, error } = await fetchUnpadStartups()
 
   return (
