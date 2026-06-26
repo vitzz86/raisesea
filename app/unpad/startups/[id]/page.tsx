@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { CoreToolsBand, UnpadShell, WorkspaceButton } from '../../UnpadShell'
 import { fetchUnpadStartup, requireUnpadOperator } from '../../incubator'
+import type { IncubatorDeckVersionView } from '../../incubator'
 import type { MilestoneStatus, StartupStatus } from '../../data'
 
 type StartupPageProps = {
@@ -57,6 +58,7 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
 
   const deckDelta = startup.latestDelta ?? 0
   const milestones = buildMilestones(startup.latestVersion, startup.nextMilestone)
+  const chronologicalVersions = [...versions].sort((a, b) => a.versionNumber - b.versionNumber)
 
   return (
     <UnpadShell
@@ -155,6 +157,12 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
             ))}
           </div>
         </aside>
+      </section>
+
+      <section className="mt-8">
+        <Panel title="Score movement over time" icon={<TrendingUp className="w-4 h-4" strokeWidth={1.75} />}>
+          <ScoreMovementChart versions={chronologicalVersions} />
+        </Panel>
       </section>
 
       <section className="mt-8 grid lg:grid-cols-[1fr_.85fr] gap-5">
@@ -270,6 +278,150 @@ export default async function UnpadStartupPage({ params }: StartupPageProps) {
 
       <CoreToolsBand />
     </UnpadShell>
+  )
+}
+
+function ScoreMovementChart({ versions }: { versions: IncubatorDeckVersionView[] }) {
+  const scoredVersions = versions.filter(deck => deck.score != null)
+
+  if (scoredVersions.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-[#d9dfd2] p-6 text-sm text-[#687468] text-center">
+        Score movement appears after the first deck upload.
+      </div>
+    )
+  }
+
+  const latest = scoredVersions[scoredVersions.length - 1]
+  const first = scoredVersions[0]
+  const best = scoredVersions.reduce((winner, deck) => (deck.score ?? 0) > (winner.score ?? 0) ? deck : winner, first)
+  const movement = (latest.score ?? 0) - (first.score ?? 0)
+
+  return (
+    <div className="grid lg:grid-cols-[1fr_240px] gap-5 items-stretch">
+      <div className="rounded-lg border border-[#e3e8df] bg-[#fbfcfa] p-4 overflow-hidden">
+        <ScoreLineSvg versions={scoredVersions} />
+      </div>
+      <div className="grid sm:grid-cols-3 lg:grid-cols-1 gap-3">
+        <TrendStat
+          label="Latest score"
+          value={`${latest.score}/100`}
+          detail={`${latest.version} uploaded ${latest.uploadedAt}`}
+        />
+        <TrendStat
+          label="Movement"
+          value={`${movement >= 0 ? '+' : ''}${movement}`}
+          detail={scoredVersions.length === 1 ? 'Baseline created' : `From ${first.version} to ${latest.version}`}
+          tone={movement >= 0 ? 'green' : 'red'}
+        />
+        <TrendStat
+          label="Best version"
+          value={`${best.score}/100`}
+          detail={`${best.version} focus: ${best.focus}`}
+          tone="blue"
+        />
+      </div>
+    </div>
+  )
+}
+
+function ScoreLineSvg({ versions }: { versions: IncubatorDeckVersionView[] }) {
+  const width = 760
+  const height = 260
+  const padding = { top: 22, right: 28, bottom: 54, left: 46 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const ticks = [100, 75, 50, 25, 0]
+  const count = versions.length
+  const xFor = (index: number) => padding.left + (count === 1 ? plotWidth / 2 : (plotWidth * index) / (count - 1))
+  const yFor = (score: number) => padding.top + ((100 - Math.max(0, Math.min(100, score))) / 100) * plotHeight
+  const points = versions.map((deck, index) => ({
+    deck,
+    x: xFor(index),
+    y: yFor(deck.score ?? 0),
+  }))
+  const linePoints = points.map(point => `${point.x},${point.y}`).join(' ')
+  const areaPath = points.length > 1
+    ? `M ${points[0].x} ${padding.top + plotHeight} L ${points.map(point => `${point.x} ${point.y}`).join(' L ')} L ${points[points.length - 1].x} ${padding.top + plotHeight} Z`
+    : ''
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto min-h-[220px]" role="img" aria-label="Deck score movement over time">
+      <defs>
+        <linearGradient id="scoreMovementArea" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#1a4d2e" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#1a4d2e" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+
+      {ticks.map(tick => {
+        const y = yFor(tick)
+        return (
+          <g key={tick}>
+            <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="#e3e8df" strokeWidth="1" />
+            <text x={padding.left - 12} y={y + 4} textAnchor="end" fontSize="11" fill="#687468">{tick}</text>
+          </g>
+        )
+      })}
+
+      <line x1={padding.left} x2={padding.left} y1={padding.top} y2={padding.top + plotHeight} stroke="#cfd8ce" strokeWidth="1" />
+      <line x1={padding.left} x2={width - padding.right} y1={padding.top + plotHeight} y2={padding.top + plotHeight} stroke="#cfd8ce" strokeWidth="1" />
+
+      {areaPath && <path d={areaPath} fill="url(#scoreMovementArea)" />}
+      {points.length > 1 ? (
+        <polyline points={linePoints} fill="none" stroke="#1a4d2e" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      ) : (
+        <line
+          x1={padding.left + plotWidth * 0.25}
+          x2={padding.left + plotWidth * 0.75}
+          y1={points[0].y}
+          y2={points[0].y}
+          stroke="#1a4d2e"
+          strokeWidth="4"
+          strokeLinecap="round"
+        />
+      )}
+
+      {points.map((point, index) => {
+        const delta = point.deck.scoreDelta
+        const isLatest = index === points.length - 1
+        return (
+          <g key={point.deck.id}>
+            <circle cx={point.x} cy={point.y} r={isLatest ? 7 : 5} fill="#ffffff" stroke={isLatest ? '#1a4d2e' : '#d8a640'} strokeWidth={isLatest ? 4 : 3} />
+            <text x={point.x} y={point.y - 15} textAnchor="middle" fontSize="12" fontWeight="700" fill="#102033">
+              {point.deck.score}
+            </text>
+            <text x={point.x} y={padding.top + plotHeight + 24} textAnchor="middle" fontSize="12" fontWeight="700" fill="#102033">
+              {point.deck.version}
+            </text>
+            <text x={point.x} y={padding.top + plotHeight + 40} textAnchor="middle" fontSize="10" fill="#687468">
+              {delta == null ? 'baseline' : `${delta >= 0 ? '+' : ''}${delta}`}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function TrendStat({ label, value, detail, tone = 'green' }: {
+  label: string
+  value: string
+  detail: string
+  tone?: 'green' | 'blue' | 'red'
+}) {
+  const toneClass = {
+    green: 'text-[#1a4d2e] bg-[#eef4ef]',
+    blue: 'text-[#1d5f91] bg-[#eef6ff]',
+    red: 'text-[#991b1b] bg-[#fef2f2]',
+  }
+
+  return (
+    <div className="rounded-lg border border-[#e3e8df] bg-white p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[#687468]">{label}</div>
+      <div className={`inline-flex rounded-md px-2 py-1 mt-3 text-xl font-semibold ${toneClass[tone]}`}>{value}</div>
+      <p className="text-xs text-[#687468] leading-relaxed mt-3">{detail}</p>
+    </div>
   )
 }
 
