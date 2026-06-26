@@ -11,6 +11,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isSuperAdmin } from '@/lib/super-admin'
 import { getBusyBlocks } from '@/lib/google-calendar'
 import { computeFreeSlots, type AvailabilityWindow, type SoftHeldSlot } from '@/lib/slot-computation'
 
@@ -18,6 +19,9 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
   // Slot listing is gated to signed-in users — only founders with accounts can book.
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (!(await isSuperAdmin(user))) {
+    return NextResponse.json({ error: 'This feature is currently available to admins only' }, { status: 403 })
+  }
 
   const { id: vcProfileId } = await context.params
 

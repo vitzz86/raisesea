@@ -44,7 +44,7 @@ export default async function MatchPage({
     const isExpert = await isApprovedExpert(user.id)
     return (
       <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="dashboard">
-        <MatchView isOwner={isOwner} />
+        <MatchView isOwner={isOwner} canUseExpertFeatures={admin} />
       </DashboardShell>
     )
   }
@@ -54,7 +54,7 @@ export default async function MatchPage({
     <>
       <TopBar />
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
-        <MatchView isOwner={isOwner} />
+        <MatchView isOwner={isOwner} canUseExpertFeatures={false} />
       </div>
     </>
   )

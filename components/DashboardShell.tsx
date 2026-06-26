@@ -112,6 +112,13 @@ const MOBILE_BOTTOM_NAV: NavItem[] = [
   { key: 'experts',    label: 'Experts',  href: '/meet',            icon: <Users className="w-5 h-5" strokeWidth={1.75} /> },
 ]
 
+const MOBILE_BOTTOM_NAV_NO_EXPERTS: NavItem[] = [
+  { key: 'dashboard',  label: 'Home',     href: '/dashboard',       icon: <Home className="w-5 h-5" strokeWidth={1.75} /> },
+  { key: 'mock-pitch', label: 'Practice', href: '/mock-pitch',      icon: <Target className="w-5 h-5" strokeWidth={1.75} /> },
+  { key: 'crm',        label: 'CRM',      href: '/crm',             icon: <Briefcase className="w-5 h-5" strokeWidth={1.75} /> },
+  { key: 'news',       label: 'News',     href: '/news',            icon: <Newspaper className="w-5 h-5" strokeWidth={1.75} /> },
+]
+
 // ─── Main component ───────────────────────────────────────────────
 export default function DashboardShell({ user, profile, isAdmin, isApprovedExpert = false, activePath, children }: ShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -121,9 +128,19 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
   const initial = (displayName[0] || 'U').toUpperCase()
 
   // Compose visible sections based on user role
-  const sections = [...FOUNDER_SECTIONS]
+  const founderSections = FOUNDER_SECTIONS
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => (
+        isAdmin || (item.key !== 'experts' && item.key !== 'meetings')
+      )),
+    }))
+    .filter(section => section.items.length > 0)
+
+  const sections = [...founderSections]
   if (isApprovedExpert) sections.push(EXPERT_SECTION)
   if (isAdmin) sections.push(ADMIN_SECTION)
+  const mobileBottomNav = isAdmin ? MOBILE_BOTTOM_NAV : MOBILE_BOTTOM_NAV_NO_EXPERTS
 
   return (
     <div className="min-h-screen bg-surface-page">
@@ -203,7 +220,7 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
 
       {/* ─── MOBILE BOTTOM NAV (<md) ────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-card border-t border-border flex items-stretch h-16">
-        {MOBILE_BOTTOM_NAV.map(item => {
+        {mobileBottomNav.map(item => {
           const active = activePath === item.key
           return (
             <Link
@@ -229,7 +246,7 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
       </nav>
 
       {/* ─── FIRST-RUN TOUR MODAL ───────────────────────────────── */}
-      <Tour open={tourOpen} onClose={closeTour} />
+      <Tour open={tourOpen} onClose={closeTour} showExpertFeatures={isAdmin} />
     </div>
   )
 }

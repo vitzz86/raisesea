@@ -30,6 +30,8 @@ export default async function FounderMeetingsPage() {
     .maybeSingle()
 
   const admin = await isSuperAdmin(user)
+  if (!admin) redirect('/dashboard')
+
   const isExpert = await isApprovedExpert(user.id)
 
   const { data: requests } = await supabaseAdmin

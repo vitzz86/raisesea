@@ -3,6 +3,7 @@ import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-serve
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
+import { FREE_MOCK_PITCH_MONTHLY_LIMIT, currentUsageWindow, getMockPitchUsage } from '@/lib/usage-limits'
 import DashboardShell from '@/components/DashboardShell'
 import MockPitchHome from './MockPitchHome'
 
@@ -18,6 +19,8 @@ export default async function MockPitchPage() {
     .select('full_name, company_name')
     .eq('id', user.id)
     .maybeSingle()
+
+  const admin = await isSuperAdmin(user)
 
   // Load the user's submissions that have a deck_analysis available (needed for Q&A context)
   const { data: subs } = await supabaseAdmin
@@ -39,8 +42,9 @@ export default async function MockPitchPage() {
   // Lookup company names for sessions
   const subById = Object.fromEntries((subs || []).map(s => [s.id as string, s]))
 
-  const admin = await isSuperAdmin(user)
   const isExpert = await isApprovedExpert(user.id)
+  const usageWindow = currentUsageWindow()
+  const mockPitchUsage = admin ? 0 : await getMockPitchUsage(user.id, usageWindow)
 
   return (
     <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="mock-pitch">
@@ -50,6 +54,12 @@ export default async function MockPitchPage() {
           ...s,
           submission: s.submission_id ? subById[s.submission_id as string] || null : null,
         }))}
+        usage={{
+          isLimited: !admin,
+          used: mockPitchUsage,
+          limit: FREE_MOCK_PITCH_MONTHLY_LIMIT,
+          resetLabel: usageWindow.resetLabel,
+        }}
       />
     </DashboardShell>
   )

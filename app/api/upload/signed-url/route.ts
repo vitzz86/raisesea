@@ -18,6 +18,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { getSessionUser } from '@/lib/supabase-server'
+import {
+  FREE_DECK_ANALYSIS_MONTHLY_LIMIT,
+  canBypassFreeLimits,
+  currentUsageWindow,
+  findExistingDeckAnalysis,
+  getDeckAnalysisUsage,
+  monthlyLimitMessage,
+  normalizeSha256,
+} from '@/lib/usage-limits'
 
 const BUCKET = 'pitch-decks'
 const MAX_DECK_BYTES = 25 * 1024 * 1024  // 25MB hard ceiling (matches lib/storage.ts)
@@ -33,7 +42,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null) as
-      | { fileName?: string; fileSize?: number; mimeType?: string }
+      | { fileName?: string; fileSize?: number; mimeType?: string; deck_sha256?: string; deckSha256?: string }
       | null
 
     if (!body) {
@@ -41,6 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { fileName, fileSize, mimeType } = body
+    const deckSha256 = normalizeSha256(body.deck_sha256 || body.deckSha256)
 
     // ── Validation ────────────────────────────────────────────
     if (!fileName || typeof fileName !== 'string') {
@@ -73,6 +83,40 @@ export async function POST(req: NextRequest) {
     // Use service role to read session — same pattern as /api/submit
     const sessionUser = await getSessionUser()
     const userId = sessionUser?.id || null
+
+    if (sessionUser && !(await canBypassFreeLimits(sessionUser))) {
+      const usageWindow = currentUsageWindow()
+      const usedDeckAnalyses = await getDeckAnalysisUsage(sessionUser.id, usageWindow)
+
+      if (usedDeckAnalyses >= FREE_DECK_ANALYSIS_MONTHLY_LIMIT) {
+        return NextResponse.json(
+          {
+            error: monthlyLimitMessage('deck', FREE_DECK_ANALYSIS_MONTHLY_LIMIT, usageWindow.resetLabel),
+            code: 'MONTHLY_DECK_LIMIT',
+            used: usedDeckAnalyses,
+            limit: FREE_DECK_ANALYSIS_MONTHLY_LIMIT,
+            reset_at: usageWindow.resetIso,
+          },
+          { status: 429 }
+        )
+      }
+
+      if (deckSha256) {
+        const { existing } = await findExistingDeckAnalysis(sessionUser.id, deckSha256)
+        if (existing) {
+          return NextResponse.json(
+            {
+              error: 'You already analyzed this deck. Open the existing analysis instead, or upload a revised deck.',
+              code: 'DUPLICATE_DECK',
+              existing_submission_id: existing.id,
+              existing_slug: existing.unique_slug,
+              existing_url: `/match/${existing.unique_slug}`,
+            },
+            { status: 409 }
+          )
+        }
+      }
+    }
 
     // Slug becomes the filename AND the public match page URL: /match/<slug>
     // Generated here (not in /api/submit) so client can pass it through.

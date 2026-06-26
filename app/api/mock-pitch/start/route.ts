@@ -3,6 +3,13 @@ import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { questionCountForDuration, type Mode, type Question, PITCH_DURATIONS, QA_DURATIONS } from '@/lib/mock-pitch'
 import { distillDeckAnalysis, businessProfileHeader, MONEY_FORMAT_INSTRUCTION } from '@/lib/mock-pitch-context'
+import {
+  FREE_MOCK_PITCH_MONTHLY_LIMIT,
+  canBypassFreeLimits,
+  currentUsageWindow,
+  getMockPitchUsage,
+  monthlyLimitMessage,
+} from '@/lib/usage-limits'
 
 export const maxDuration = 60
 export const runtime = 'nodejs'
@@ -38,6 +45,24 @@ export async function POST(req: Request) {
   if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 })
   if (!sub) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
   if (sub.user_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (!(await canBypassFreeLimits(user))) {
+    const usageWindow = currentUsageWindow()
+    const usedMockPitchSessions = await getMockPitchUsage(user.id, usageWindow)
+
+    if (usedMockPitchSessions >= FREE_MOCK_PITCH_MONTHLY_LIMIT) {
+      return NextResponse.json(
+        {
+          error: monthlyLimitMessage('mock', FREE_MOCK_PITCH_MONTHLY_LIMIT, usageWindow.resetLabel),
+          code: 'MONTHLY_MOCK_PITCH_LIMIT',
+          used: usedMockPitchSessions,
+          limit: FREE_MOCK_PITCH_MONTHLY_LIMIT,
+          reset_at: usageWindow.resetIso,
+        },
+        { status: 429 }
+      )
+    }
+  }
 
   let questions: Question[] | null = null
   if (mode === 'qa') {

@@ -246,15 +246,17 @@ export default async function DashboardHub() {
       .limit(1)
       .maybeSingle(),
 
-    // Upcoming confirmed meetings (status = confirmed, with future confirmed_slot)
-    supabaseAdmin
-      .from('meeting_requests')
-      .select('id, vc_profile_id, founder_user_id, status, confirmed_slot, meeting_goal, google_meet_link, created_at')
-      .eq('founder_user_id', user.id)
-      .eq('status', 'confirmed')
-      .gte('confirmed_slot', new Date().toISOString())
-      .order('confirmed_slot', { ascending: true })
-      .limit(3),
+    // Upcoming confirmed meetings (admin-only founder feature)
+    isAdmin
+      ? supabaseAdmin
+        .from('meeting_requests')
+        .select('id, vc_profile_id, founder_user_id, status, confirmed_slot, meeting_goal, google_meet_link, created_at')
+        .eq('founder_user_id', user.id)
+        .eq('status', 'confirmed')
+        .gte('confirmed_slot', new Date().toISOString())
+        .order('confirmed_slot', { ascending: true })
+        .limit(3)
+      : Promise.resolve({ data: [] }),
 
     // CRM contacts with a next_action set — these are the action items the user needs to do
     supabaseAdmin
@@ -265,13 +267,15 @@ export default async function DashboardHub() {
       .order('next_action_date', { ascending: true, nullsFirst: false })
       .limit(4),
 
-    // 5 active experts for the "Mentors you might meet" sub-section
-    supabaseAdmin
-      .from('vc_profiles')
-      .select('id, user_id, display_name, fund_or_firm, title, bio, expertise_areas, application_status')
-      .eq('application_status', 'active')
-      .neq('user_id', user.id)
-      .limit(5),
+    // 5 active experts for the "Mentors you might meet" sub-section (admin-only founder feature)
+    isAdmin
+      ? supabaseAdmin
+        .from('vc_profiles')
+        .select('id, user_id, display_name, fund_or_firm, title, bio, expertise_areas, application_status')
+        .eq('application_status', 'active')
+        .neq('user_id', user.id)
+        .limit(5)
+      : Promise.resolve({ data: [] }),
 
     // 3 latest news items from the past 7 days
     supabaseAdmin
@@ -470,54 +474,53 @@ export default async function DashboardHub() {
         </div>
       </HubBlock>
 
-      {/* ───────────────────────────────────────────────────────
-          BLOCK 3: MEET — Mentors you might meet
-          ─────────────────────────────────────────────────────── */}
-      <HubBlock
-        kicker="Prepare · Meet"
-        kickerIcon={<Users className="w-3.5 h-3.5" strokeWidth={1.75} />}
-        title="Mentors you might meet"
-        cta={{ label: 'Browse all mentors', href: '/meet' }}
-      >
-        {suggestedExperts.length === 0 ? (
-          <div className="bg-surface-card border border-border rounded-xl p-6 text-center">
-            <p className="text-sm text-text-tertiary">No mentors available yet. Check back soon.</p>
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {suggestedExperts.slice(0, 3).map(exp => (
-              <Link
-                key={exp.id}
-                href={`/meet/${exp.id}`}
-                className="group block bg-surface-card border border-border rounded-xl p-4 hover:border-brand/30 hover:shadow-subtle transition-all"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-full bg-brand-soft text-brand flex items-center justify-center text-sm font-semibold shrink-0">
-                    {(exp.display_name || '?').slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-text-primary truncate group-hover:text-brand transition-colors">
-                      {exp.display_name || 'Unnamed expert'}
+      {isAdmin && (
+        <HubBlock
+          kicker="Prepare · Meet"
+          kickerIcon={<Users className="w-3.5 h-3.5" strokeWidth={1.75} />}
+          title="Mentors you might meet"
+          cta={{ label: 'Browse all mentors', href: '/meet' }}
+        >
+          {suggestedExperts.length === 0 ? (
+            <div className="bg-surface-card border border-border rounded-xl p-6 text-center">
+              <p className="text-sm text-text-tertiary">No mentors available yet. Check back soon.</p>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {suggestedExperts.slice(0, 3).map(exp => (
+                <Link
+                  key={exp.id}
+                  href={`/meet/${exp.id}`}
+                  className="group block bg-surface-card border border-border rounded-xl p-4 hover:border-brand/30 hover:shadow-subtle transition-all"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-full bg-brand-soft text-brand flex items-center justify-center text-sm font-semibold shrink-0">
+                      {(exp.display_name || '?').slice(0, 1).toUpperCase()}
                     </div>
-                    <div className="text-[11px] text-text-tertiary truncate">
-                      {[exp.title, exp.fund_or_firm].filter(Boolean).join(' · ') || 'Expert'}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-text-primary truncate group-hover:text-brand transition-colors">
+                        {exp.display_name || 'Unnamed expert'}
+                      </div>
+                      <div className="text-[11px] text-text-tertiary truncate">
+                        {[exp.title, exp.fund_or_firm].filter(Boolean).join(' · ') || 'Expert'}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {exp.expertise_areas && exp.expertise_areas.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-border-muted">
-                    {exp.expertise_areas.slice(0, 3).map((tag, i) => (
-                      <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-muted text-text-secondary">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </Link>
-            ))}
-          </div>
-        )}
-      </HubBlock>
+                  {exp.expertise_areas && exp.expertise_areas.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-border-muted">
+                      {exp.expertise_areas.slice(0, 3).map((tag, i) => (
+                        <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-muted text-text-secondary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </HubBlock>
+      )}
 
       {/* ───────────────────────────────────────────────────────
           BLOCK 4: EXECUTE — meetings + CRM action items
@@ -528,55 +531,57 @@ export default async function DashboardHub() {
         title="What's next this week"
         cta={{ label: 'Open CRM', href: '/crm' }}
       >
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className={isAdmin ? 'grid lg:grid-cols-2 gap-4' : 'grid gap-4'}>
 
           {/* Upcoming meetings */}
-          <div className="bg-surface-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-md bg-brand-soft text-brand flex items-center justify-center">
-                <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} />
-              </div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Upcoming meetings</div>
-            </div>
-
-            {upcomingMeetings.length === 0 ? (
-              <>
-                <p className="text-sm text-text-tertiary leading-relaxed mb-3">
-                  No meetings on your calendar. When experts confirm your meeting requests, they appear here.
-                </p>
-                <Link
-                  href="/meet"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
-                >
-                  Browse mentors
-                  <ArrowRight className="w-3 h-3" strokeWidth={2} />
-                </Link>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2 mb-3">
-                  {upcomingMeetings.map(m => (
-                    <div key={m.id} className="flex items-start gap-2.5 py-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-text-tertiary mt-0.5 shrink-0" strokeWidth={1.75} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium text-text-primary">
-                          {m.confirmed_slot ? fmtMeetingDate(m.confirmed_slot) : 'TBD'}
-                        </div>
-                        <div className="text-[11px] text-text-tertiary truncate">{m.meeting_goal || 'Mentor meeting'}</div>
-                      </div>
-                    </div>
-                  ))}
+          {isAdmin && (
+            <div className="bg-surface-card border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-md bg-brand-soft text-brand flex items-center justify-center">
+                  <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} />
                 </div>
-                <Link
-                  href="/dashboard/meetings"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
-                >
-                  View all meetings
-                  <ArrowRight className="w-3 h-3" strokeWidth={2} />
-                </Link>
-              </>
-            )}
-          </div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Upcoming meetings</div>
+              </div>
+
+              {upcomingMeetings.length === 0 ? (
+                <>
+                  <p className="text-sm text-text-tertiary leading-relaxed mb-3">
+                    No meetings on your calendar. When experts confirm your meeting requests, they appear here.
+                  </p>
+                  <Link
+                    href="/meet"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
+                  >
+                    Browse mentors
+                    <ArrowRight className="w-3 h-3" strokeWidth={2} />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2 mb-3">
+                    {upcomingMeetings.map(m => (
+                      <div key={m.id} className="flex items-start gap-2.5 py-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-text-tertiary mt-0.5 shrink-0" strokeWidth={1.75} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-medium text-text-primary">
+                            {m.confirmed_slot ? fmtMeetingDate(m.confirmed_slot) : 'TBD'}
+                          </div>
+                          <div className="text-[11px] text-text-tertiary truncate">{m.meeting_goal || 'Mentor meeting'}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Link
+                    href="/dashboard/meetings"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-hover transition-colors"
+                  >
+                    View all meetings
+                    <ArrowRight className="w-3 h-3" strokeWidth={2} />
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
 
           {/* CRM action items */}
           <div className="bg-surface-card border border-border rounded-xl p-4">

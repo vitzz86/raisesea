@@ -24,6 +24,7 @@ import { Button } from '@/components/ui'
 const STORAGE_KEY = 'raisesea_tour_completed'
 
 interface TourStep {
+  key:         string
   icon:        React.ReactNode
   title:       string
   description: string
@@ -32,27 +33,32 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
+    key:         'welcome',
     icon:        <Sparkles className="w-6 h-6" strokeWidth={1.5} />,
     title:       'Welcome to RaiseSEA',
     description: 'You\'ve got a deck. We\'ll help you turn it into a closed round. Here\'s the 60-second tour.',
     highlight:   'Assess → Prepare → Execute',
   },
   {
+    key:         'assess',
     icon:        <FileText className="w-6 h-6" strokeWidth={1.5} />,
     title:       'Assess your deck',
     description: 'Upload your pitch deck and get an AI-powered analysis in 60 seconds — deck score, market sizing, competitor analysis, and matched investors from our SEA database.',
   },
   {
+    key:         'prepare',
     icon:        <Target className="w-6 h-6" strokeWidth={1.5} />,
     title:       'Prepare your pitch',
     description: 'Practice your story with mock pitches and drill investor Q&A. The AI listens, scores, and tells you exactly where you fumbled — before a real investor catches it.',
   },
   {
+    key:         'experts',
     icon:        <Users className="w-6 h-6" strokeWidth={1.5} />,
     title:       'Talk to experts',
     description: 'Stuck on something? Book 30 minutes with a mentor, VC, or domain expert. Free for now. Pick someone who\'s been where you\'re going.',
   },
   {
+    key:         'execute',
     icon:        <Briefcase className="w-6 h-6" strokeWidth={1.5} />,
     title:       'Execute the raise',
     description: 'Track every investor you talk to in the built-in CRM. Categorize, stage them, log notes after meetings. Stop using a spreadsheet you have to babysit.',
@@ -60,12 +66,14 @@ const STEPS: TourStep[] = [
 ]
 
 interface TourProps {
-  open:    boolean
-  onClose: () => void
+  open:               boolean
+  onClose:            () => void
+  showExpertFeatures?: boolean
 }
 
-export function Tour({ open, onClose }: TourProps) {
+export function Tour({ open, onClose, showExpertFeatures = true }: TourProps) {
   const [step, setStep] = useState(0)
+  const steps = showExpertFeatures ? STEPS : STEPS.filter(s => s.key !== 'experts')
 
   useEffect(() => {
     if (open) setStep(0)
@@ -74,8 +82,8 @@ export function Tour({ open, onClose }: TourProps) {
   if (!open) return null
 
   const isFirst = step === 0
-  const isLast  = step === STEPS.length - 1
-  const current = STEPS[step]
+  const isLast  = step === steps.length - 1
+  const current = steps[step] || steps[0]
 
   const handleNext = () => {
     if (isLast) {
@@ -117,7 +125,7 @@ export function Tour({ open, onClose }: TourProps) {
 
         {/* Progress dots */}
         <div className="flex justify-center gap-1.5 mb-6">
-          {STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <div
               key={i}
               className={`h-1 rounded-full transition-all ${

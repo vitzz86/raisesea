@@ -67,8 +67,9 @@ export function deckAnalysisNextActions(args: {
   deckAnalysis: Record<string, unknown> | null
   practiceIcon: ReactNode
   expertIcon: ReactNode
+  includeExpertAction?: boolean
 }): NextAction[] {
-  const { deckAnalysis, practiceIcon, expertIcon } = args
+  const { deckAnalysis, practiceIcon, expertIcon, includeExpertAction = true } = args
   if (!deckAnalysis) return []
 
   const score = typeof deckAnalysis.overall_score === 'number' ? deckAnalysis.overall_score : null
@@ -85,7 +86,7 @@ export function deckAnalysisNextActions(args: {
     practiceDescription = `Your ${dimensionLabel(weakest.name)} section scored lowest — practice answering questions on it.`
   }
 
-  return [
+  const actions: NextAction[] = [
     {
       priority: 'primary',
       icon:     practiceIcon,
@@ -93,6 +94,10 @@ export function deckAnalysisNextActions(args: {
       description: practiceDescription,
       href:     '/mock-pitch',
     },
+  ]
+
+  if (includeExpertAction) {
+    actions.push(
     {
       priority: 'secondary',
       icon:     expertIcon,
@@ -100,7 +105,10 @@ export function deckAnalysisNextActions(args: {
       description: 'Talk to a mentor, VC, or domain expert about your raise. 30-minute sessions.',
       href:     '/meet',
     },
-  ]
+    )
+  }
+
+  return actions
 }
 
 /**
@@ -113,9 +121,10 @@ export function deckAnalysisNextActions(args: {
 export function mockPitchHomeNextActions(args: {
   pitchIcon: ReactNode
   expertIcon: ReactNode
+  includeExpertAction?: boolean
 }): NextAction[] {
-  const { pitchIcon, expertIcon } = args
-  return [
+  const { pitchIcon, expertIcon, includeExpertAction = true } = args
+  const actions: NextAction[] = [
     {
       priority: 'primary',
       icon:     pitchIcon,
@@ -123,6 +132,10 @@ export function mockPitchHomeNextActions(args: {
       description: 'Run through your whole deck. Then drill investor questions in a Q&A session.',
       href:     '#start-pitch',  // anchor to the picker on this page
     },
+  ]
+
+  if (includeExpertAction) {
+    actions.push(
     {
       priority: 'tertiary',
       icon:     expertIcon,
@@ -130,7 +143,10 @@ export function mockPitchHomeNextActions(args: {
       description: 'Want a human review of your delivery? Find an expert.',
       href:     '/meet',
     },
-  ]
+    )
+  }
+
+  return actions
 }
 
 /**
@@ -147,8 +163,9 @@ export function mockPitchDebriefNextActions(args: {
   retryIcon:        ReactNode
   switchIcon:       ReactNode
   expertIcon:       ReactNode
+  includeExpertAction?: boolean
 }): NextAction[] {
-  const { sessionType, overallScore, weakestDimension, retryIcon, switchIcon, expertIcon } = args
+  const { sessionType, overallScore, weakestDimension, retryIcon, switchIcon, expertIcon, includeExpertAction = true } = args
 
   const switchTo = sessionType === 'pitch' ? 'qa' : 'pitch'
   const switchLabel = sessionType === 'pitch'
@@ -160,7 +177,7 @@ export function mockPitchDebriefNextActions(args: {
 
   // Low score: retry is the priority
   if (overallScore != null && overallScore < 65) {
-    return [
+    const actions: NextAction[] = [
       {
         priority: 'primary',
         icon:     retryIcon,
@@ -177,6 +194,10 @@ export function mockPitchDebriefNextActions(args: {
         description: switchDescription,
         href:     `/mock-pitch?mode=${switchTo}`,
       },
+    ]
+
+    if (includeExpertAction) {
+      actions.push(
       {
         priority: 'tertiary',
         icon:     expertIcon,
@@ -184,11 +205,14 @@ export function mockPitchDebriefNextActions(args: {
         description: 'Want a human pitch coach? Browse mentors and book 30 minutes.',
         href:     '/meet',
       },
-    ]
+      )
+    }
+
+    return actions
   }
 
   // Solid score: switch modes
-  return [
+  const actions: NextAction[] = [
     {
       priority: 'primary',
       icon:     switchIcon,
@@ -203,6 +227,10 @@ export function mockPitchDebriefNextActions(args: {
       description: 'Consistency matters — can you hit this score twice in a row?',
       href:     '/mock-pitch',
     },
+  ]
+
+  if (includeExpertAction) {
+    actions.push(
     {
       priority: 'tertiary',
       icon:     expertIcon,
@@ -210,5 +238,8 @@ export function mockPitchDebriefNextActions(args: {
       description: 'Get a human read on your delivery. 30-minute sessions.',
       href:     '/meet',
     },
-  ]
+    )
+  }
+
+  return actions
 }

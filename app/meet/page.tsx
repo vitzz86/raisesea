@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
-import TopBar from '@/components/TopBar'
 import DashboardShell from '@/components/DashboardShell'
 import { PageHeader, EmptyState, Card } from '@/components/ui'
 import { Search, Users } from 'lucide-react'
@@ -37,6 +37,10 @@ export default async function MeetDirectoryPage({
 }) {
   const { type, q } = await searchParams
   const user = await getSessionUser()
+  if (!user) redirect('/login?redirectTo=/meet')
+
+  const admin = await isSuperAdmin(user)
+  if (!admin) redirect('/dashboard')
 
   let query = supabaseAdmin
     .from('vc_profiles')
@@ -110,26 +114,15 @@ export default async function MeetDirectoryPage({
     </>
   )
 
-  // ── Signed-in: wrap in dashboard shell
-  if (user) {
-    const supabase = await createSupabaseServerClient()
-    const { data: profile } = await supabase
-      .from('user_profiles').select('full_name, company_name').eq('id', user.id).maybeSingle()
-    const admin = await isSuperAdmin(user)
-    const isExpert = await isApprovedExpert(user.id)
-    return (
-      <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="experts">
-        {body}
-      </DashboardShell>
-    )
-  }
+  const supabase = await createSupabaseServerClient()
+  const { data: profile } = await supabase
+    .from('user_profiles').select('full_name, company_name').eq('id', user.id).maybeSingle()
+  const isExpert = await isApprovedExpert(user.id)
 
-  // ── Anonymous: top bar only
   return (
-    <div className="min-h-screen bg-surface-page">
-      <TopBar />
-      <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-10">{body}</div>
-    </div>
+    <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="experts">
+      {body}
+    </DashboardShell>
   )
 }
 

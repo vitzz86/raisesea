@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 // SEA-only — RaiseSEA's investor database only contains funds active in SEA, so non-SEA
@@ -9,6 +9,9 @@ const SECTORS   = ['AI/ML','Fintech','SaaS / B2B','E-commerce','Healthtech','Log
 const STAGES    = ['Pre-seed','Seed','Pre-Series A','Series A','Series B']
 const BIZ_MODELS = ['B2B','B2C','B2B2C','Marketplace','SaaS','Project / Contract','D2C','Other']
 const FOUNDER_PROFILES = ['Technical founder','Domain expert','Serial entrepreneur','First-time founder','Business founder','Mixed team']
+const CHECKING_STEPS = ['Fingerprinting the PDF','Checking monthly access','Preparing secure upload']
+const UPLOAD_STEPS = ['Creating upload session','Uploading PDF to secure storage','Verifying upload']
+const ANALYSIS_STEPS = ['Reading deck content','Scoring investor readiness','Sizing the market','Mapping competitors','Matching SEA investors','Building your report']
 
 function formatUSD(val: string) {
   const n = val.replace(/[^0-9]/g, '')
@@ -17,6 +20,15 @@ function formatUSD(val: string) {
 }
 function parseUSD(val: string) { return val.replace(/[^0-9]/g, '') }
 
+async function sha256File(file: File): Promise<string | null> {
+  if (!globalThis.crypto?.subtle) return null
+  const buffer = await file.arrayBuffer()
+  const hash = await crypto.subtle.digest('SHA-256', buffer)
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 type ApplyFormProps = {
   prefill: {
     founder_email: string     // from authenticated user — read-only
@@ -24,14 +36,21 @@ type ApplyFormProps = {
     company_name: string      // from profile.company_name — editable
     country: string           // from profile.country — editable
   }
+  usage: {
+    isLimited: boolean
+    used: number
+    limit: number
+    resetLabel: string
+  }
 }
 
-export default function ApplyForm({ prefill }: ApplyFormProps) {
+export default function ApplyForm({ prefill, usage }: ApplyFormProps) {
   const router = useRouter()
   const [step, setStep]     = useState(1)
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)  // 0-100, only shown during PDF upload phase
-  const [stage_, setStage_] = useState<'idle' | 'uploading' | 'analyzing'>('idle')
+  const [stage_, setStage_] = useState<'idle' | 'checking' | 'uploading' | 'analyzing'>('idle')
+  const [processingStep, setProcessingStep] = useState(0)
   const [error, setError]   = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const [fileName, setFileName] = useState('')
@@ -51,6 +70,21 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
   })
 
   const set = (k: string, v: string | File | null) => setForm(f => ({ ...f, [k]: v }))
+
+  useEffect(() => {
+    if (!loading || stage_ === 'idle') return
+    setProcessingStep(0)
+    const steps = stage_ === 'checking'
+      ? CHECKING_STEPS
+      : stage_ === 'uploading'
+        ? UPLOAD_STEPS
+        : ANALYSIS_STEPS
+    const intervalMs = stage_ === 'analyzing' ? 2200 : 1200
+    const timer = window.setInterval(() => {
+      setProcessingStep(step => Math.min(step + 1, steps.length - 1))
+    }, intervalMs)
+    return () => window.clearInterval(timer)
+  }, [loading, stage_])
 
   function handleMoneyInput(field: string, displayField: string, raw: string) {
     const numeric = parseUSD(raw)
@@ -86,8 +120,14 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
   async function handleSubmit() {
     if (!form.deck)         { setError('Please upload your pitch deck'); return }
     if (!form.founder_email || !form.company_name) { setError('Please fill all required fields'); return }
-    setLoading(true); setError(''); setUploadProgress(0); setStage_('uploading')
+    if (usage.isLimited && usage.used >= usage.limit) {
+      setError(`Free accounts can use ${usage.limit} deck analyses each month. Your limit resets on ${usage.resetLabel}.`)
+      return
+    }
+    setLoading(true); setError(''); setUploadProgress(0); setStage_('checking')
     try {
+      const deckSha256 = await sha256File(form.deck)
+
       // ── Step 1: Get signed upload URL from our API ──────────
       const signedRes = await fetch('/api/upload/signed-url', {
         method:  'POST',
@@ -96,14 +136,22 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
           fileName: form.deck.name,
           fileSize: form.deck.size,
           mimeType: form.deck.type || 'application/pdf',
+          deck_sha256: deckSha256,
         }),
       })
       const signed = await signedRes.json()
-      if (!signedRes.ok) throw new Error(signed.error || 'Could not prepare upload')
+      if (!signedRes.ok) {
+        if (signed.existing_url) {
+          router.push(signed.existing_url)
+          return
+        }
+        throw new Error(signed.error || 'Could not prepare upload')
+      }
 
       // ── Step 2: PUT the PDF directly to Supabase Storage ────
       // This bypasses Vercel's 4.5MB function body limit. Progress tracked
       // via XHR so the user sees a real upload bar for large decks.
+      setStage_('uploading')
       await uploadToSignedUrl(signed.uploadUrl, form.deck, setUploadProgress)
 
       // ── Step 3: POST metadata + storage path to /api/submit ─
@@ -115,6 +163,7 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
       })
       metadata.storage_path = signed.storagePath
       metadata.slug         = signed.slug
+      if (deckSha256) metadata.deck_sha256 = deckSha256
 
       const res  = await fetch('/api/submit', {
         method:  'POST',
@@ -122,7 +171,13 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
         body:    JSON.stringify(metadata),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Submission failed')
+      if (!res.ok) {
+        if (data.existing_url) {
+          router.push(data.existing_url)
+          return
+        }
+        throw new Error(data.error || 'Submission failed')
+      }
       router.push(`/match/${data.slug}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
@@ -133,6 +188,30 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
   const steps    = ['Company', 'Deck & details', 'Confirm']
   const canNext1 = !!(form.company_name && form.raise_target_usd && form.founder_email && form.founder_name)
   const canNext2 = !!form.deck
+  const deckLimitReached = usage.isLimited && usage.used >= usage.limit
+  const processingSteps = stage_ === 'checking'
+    ? CHECKING_STEPS
+    : stage_ === 'uploading'
+      ? UPLOAD_STEPS
+      : ANALYSIS_STEPS
+  const activeProcessingStep = stage_ === 'uploading'
+    ? Math.min(Math.floor(uploadProgress / Math.max(1, 100 / processingSteps.length)), processingSteps.length - 1)
+    : processingStep
+  const meterPct = stage_ === 'checking'
+    ? Math.min(28, 10 + activeProcessingStep * 9)
+    : stage_ === 'uploading'
+      ? Math.min(58, 30 + uploadProgress * 0.28)
+      : Math.min(96, 62 + activeProcessingStep * (34 / Math.max(1, processingSteps.length - 1)))
+  const processingTitle = stage_ === 'checking'
+    ? 'Checking your deck'
+    : stage_ === 'uploading'
+      ? 'Uploading your deck'
+      : 'Analyzing your deck'
+  const processingSubtitle = stage_ === 'checking'
+    ? 'We are validating your monthly access and making sure this is a new deck.'
+    : stage_ === 'uploading'
+      ? 'Your PDF is moving into secure storage before analysis starts.'
+      : 'AI is reading the deck, scoring readiness, and preparing your investor report.'
 
   return (
     <>
@@ -249,16 +328,32 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
 
         /* Error */
         .err{background:#fef2f2;border:1px solid #fecaca;color:var(--red);font-size:13px;padding:11px 15px;border-radius:10px;margin-top:18px}
+        .limit-note{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:-24px 0 28px;font-size:12px;color:var(--ink-mid);line-height:1.55}
+        .limit-note strong{color:var(--ink)}
+        .limit-note.blocked{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+        .limit-note.blocked strong{color:#7f1d1d}
 
         /* Processing */
-        .proc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:80px 20px;text-align:center;flex:1}
-        .proc-ring{width:68px;height:68px;border:3px solid var(--brand-light);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
+        .proc{display:flex;align-items:center;justify-content:center;padding:76px 20px;min-height:560px}
+        .proc-card{width:min(100%,520px);background:var(--white);border:1px solid var(--border);border-radius:16px;padding:34px;box-shadow:0 18px 45px rgba(26,77,46,.08);text-align:left}
+        .proc-head{display:flex;gap:18px;align-items:flex-start}
+        .proc-ring-wrap{position:relative;width:74px;height:74px;flex-shrink:0}
+        .proc-ring{position:absolute;inset:0;border:3px solid var(--brand-light);border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
+        .proc-core{position:absolute;inset:16px;border-radius:18px;background:var(--brand);box-shadow:0 0 0 8px rgba(26,77,46,.08);animation:corepulse 1.6s ease-in-out infinite}
+        @keyframes corepulse{0%,100%{transform:scale(.92);opacity:.75}50%{transform:scale(1);opacity:1}}
         @keyframes spin{to{transform:rotate(360deg)}}
         .proc-title{font-family:var(--font-display);font-size:26px;color:var(--ink)}
-        .proc-sub{font-size:14px;color:var(--ink-light);max-width:260px;line-height:1.65}
-        .proc-steps{display:flex;flex-direction:column;gap:10px}
-        .ps{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-light)}
-        .ps-dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex-shrink:0;animation:pulse 1.5s ease-in-out infinite}
+        .proc-sub{font-size:14px;color:var(--ink-light);line-height:1.65;margin-top:4px}
+        .proc-meter{margin-top:24px;height:8px;background:#edf3ef;border-radius:999px;overflow:hidden}
+        .proc-meter-fill{height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-mid));border-radius:999px;transition:width .35s ease}
+        .proc-steps{display:flex;flex-direction:column;gap:10px;margin-top:22px}
+        .ps{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-light);transition:color .2s}
+        .ps.active{color:var(--ink);font-weight:600}
+        .ps.done{color:var(--brand)}
+        .ps-dot{width:8px;height:8px;border-radius:50%;background:#c9d8ce;flex-shrink:0;transition:all .2s}
+        .ps.active .ps-dot{background:var(--brand);animation:pulse 1.1s ease-in-out infinite;box-shadow:0 0 0 5px rgba(26,77,46,.1)}
+        .ps.done .ps-dot{background:var(--brand)}
+        .proc-foot{margin-top:24px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;color:var(--ink-light);line-height:1.55}
         @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
 
         @media(max-width:900px){
@@ -271,47 +366,40 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
         <div className="right">
           {loading ? (
             <div className="proc">
-              <div className="proc-ring" />
-              <div>
-                <div className="proc-title">
-                  {stage_ === 'uploading' ? 'Uploading your deck' : 'Analyzing your deck'}
+              <div className="proc-card">
+                <div className="proc-head">
+                  <div className="proc-ring-wrap" aria-hidden="true">
+                    <div className="proc-ring" />
+                    <div className="proc-core" />
+                  </div>
+                  <div>
+                    <div className="proc-title">{processingTitle}</div>
+                    <div className="proc-sub">{processingSubtitle}</div>
+                  </div>
                 </div>
-                <div className="proc-sub">
+
+                <div className="proc-meter" aria-hidden="true">
+                  <div className="proc-meter-fill" style={{ width: `${meterPct}%` }} />
+                </div>
+
+                <div className="proc-steps">
+                  {processingSteps.map((s, i) => {
+                    const state = i < activeProcessingStep ? 'done' : i === activeProcessingStep ? 'active' : ''
+                    return (
+                      <div className={`ps ${state}`} key={s}>
+                        <div className="ps-dot" />
+                        <span>{s}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="proc-foot">
                   {stage_ === 'uploading'
-                    ? 'Sending the PDF to secure storage — large decks may take a moment'
-                    : 'Gemini AI is reading your pitch deck and running the full intelligence report'}
+                    ? `Upload progress: ${uploadProgress}%`
+                    : 'Keep this tab open. We will move you to the report as soon as it is ready.'}
                 </div>
               </div>
-
-              {/* Upload progress bar — only during upload stage */}
-              {stage_ === 'uploading' && (
-                <div style={{ marginTop: 18 }}>
-                  <div style={{
-                    width: '100%', height: 8, background: 'var(--surface-muted)',
-                    borderRadius: 4, overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      width: `${uploadProgress}%`, height: '100%',
-                      background: 'var(--brand)', transition: 'width 0.2s ease',
-                    }} />
-                  </div>
-                  <div style={{
-                    marginTop: 6, fontSize: 12, color: 'var(--text-tertiary)',
-                    textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {uploadProgress}%
-                  </div>
-                </div>
-              )}
-
-              {/* Analysis steps animation — only during analyzing stage */}
-              {stage_ === 'analyzing' && (
-                <div className="proc-steps">
-                  {['Extracting deck content','Scoring 8 dimensions','Researching market size','Finding competitors','Matching investors'].map((s,i)=>(
-                    <div className="ps" key={i}><div className="ps-dot" style={{animationDelay:`${i*.28}s`}} />{s}</div>
-                  ))}
-                </div>
-              )}
             </div>
           ) : (
             <>
@@ -332,6 +420,14 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
                   )
                 })}
               </div>
+
+              {usage.isLimited && (
+                <div className={`limit-note ${deckLimitReached ? 'blocked' : ''}`}>
+                  <strong>Monthly deck analyses:</strong>{' '}
+                  {Math.min(usage.used, usage.limit)}/{usage.limit} used.
+                  {' '}Resets {usage.resetLabel}.
+                </div>
+              )}
 
               {/* ── STEP 1 ── */}
               {step === 1 && (
@@ -537,7 +633,7 @@ export default function ApplyForm({ prefill }: ApplyFormProps) {
                   {error && <div className="err">{error}</div>}
                   <div className="btn-row">
                     <button className="btn-s" onClick={()=>{setError('');setStep(2)}}>Back</button>
-                    <button className="btn-p" onClick={handleSubmit}>
+                    <button className="btn-p" onClick={handleSubmit} disabled={deckLimitReached}>
                       Run analysis
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6"/></svg>
                     </button>

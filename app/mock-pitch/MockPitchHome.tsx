@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Target } from 'lucide-react'
+import { Loader2, Target } from 'lucide-react'
 import { PITCH_DURATIONS, QA_DURATIONS, questionCountForDuration, type Mode } from '@/lib/mock-pitch'
 
 type Sub = { id: string; unique_slug: string; company_name: string; stage: string | null; sector: string | null; created_at: string }
@@ -17,14 +17,25 @@ type Session = {
   debrief: { overall_score?: number; summary?: string } | null
   submission: Sub | null
 }
+type Usage = {
+  isLimited: boolean
+  used: number
+  limit: number
+  resetLabel: string
+}
 
-export default function MockPitchHome({ submissions, sessions }: { submissions: Sub[]; sessions: Session[] }) {
+export default function MockPitchHome({ submissions, sessions, usage }: { submissions: Sub[]; sessions: Session[]; usage: Usage }) {
   const router = useRouter()
   const [picker, setPicker] = useState<{ sub: Sub; mode: Mode } | null>(null)
   const [starting, setStarting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const limitReached = usage.isLimited && usage.used >= usage.limit
 
   async function startSession(sub: Sub, mode: Mode, durationMin: number) {
+    if (limitReached) {
+      setErr(`Free accounts can use ${usage.limit} mock pitch sessions each month. Your limit resets on ${usage.resetLabel}.`)
+      return
+    }
     setStarting(true); setErr(null)
     try {
       const res = await fetch('/api/mock-pitch/start', {
@@ -48,6 +59,18 @@ export default function MockPitchHome({ submissions, sessions }: { submissions: 
           Run a full pitch or drill investor questions — using your own deck.
         </p>
       </div>
+
+      {usage.isLimited && (
+        <div className={`mb-5 border rounded-lg px-4 py-3 text-sm ${
+          limitReached
+            ? 'bg-danger-bg border-danger-border text-danger-text'
+            : 'bg-surface-card border-border text-text-secondary'
+        }`}>
+          <span className="font-medium text-text-primary">Monthly usage:</span>{' '}
+          {Math.min(usage.used, usage.limit)}/{usage.limit} mock pitch sessions used.
+          <span className="text-text-tertiary"> Resets {usage.resetLabel}.</span>
+        </div>
+      )}
 
       {/* Recommended order hint — only shown when user has no completed sessions */}
       {sessions.filter(s => s.status === 'completed').length === 0 && submissions.length > 0 && (
@@ -131,6 +154,9 @@ export default function MockPitchHome({ submissions, sessions }: { submissions: 
               <button onClick={() => !starting && setPicker(null)} className="text-text-disabled hover:text-text-secondary">×</button>
             </div>
 
+            {starting ? (
+              <StartingPanel mode={picker.mode} />
+            ) : (
             <div className="p-5 space-y-4">
               {/* Mode */}
               <div>
@@ -154,7 +180,7 @@ export default function MockPitchHome({ submissions, sessions }: { submissions: 
                 <label className="block text-xs font-semibold uppercase tracking-wide text-text-tertiary mb-2">Duration</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(picker.mode === 'pitch' ? PITCH_DURATIONS : QA_DURATIONS).map(d => (
-                    <button key={d} onClick={() => startSession(picker.sub, picker.mode, d)} disabled={starting}
+                    <button key={d} onClick={() => startSession(picker.sub, picker.mode, d)} disabled={starting || limitReached}
                       className="border border-border-strong rounded-lg p-3 hover:border-brand hover:bg-[#f4f9f5] transition disabled:opacity-50">
                       <div className="text-base font-bold text-text-primary">{d} min</div>
                       {picker.mode === 'qa' && (
@@ -163,16 +189,61 @@ export default function MockPitchHome({ submissions, sessions }: { submissions: 
                     </button>
                   ))}
                 </div>
-                {starting && <div className="text-xs text-text-tertiary mt-3">⏳ {picker.mode === 'qa' ? 'Generating questions…' : 'Starting…'}</div>}
+                {limitReached && (
+                  <div className="text-xs text-danger-text mt-3">
+                    You have used this month&apos;s free mock pitch sessions. Try again after {usage.resetLabel}.
+                  </div>
+                )}
               </div>
 
               <div className="text-[10px] text-text-disabled leading-relaxed border-t border-gray-100 pt-3">
                 🎙️ Your microphone is processed locally in your browser. Audio is never uploaded or stored — only the transcribed text is saved.
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function StartingPanel({ mode }: { mode: Mode }) {
+  const steps = mode === 'qa'
+    ? ['Loading your deck context', 'Generating investor questions', 'Opening the Q&A room']
+    : ['Loading your deck context', 'Preparing timer and transcript', 'Opening the pitch room']
+
+  return (
+    <div className="p-6">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-full bg-brand-soft text-brand flex items-center justify-center shrink-0">
+          <Loader2 className="w-6 h-6 animate-spin" strokeWidth={1.75} />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-text-primary">
+            {mode === 'qa' ? 'Preparing investor Q&A' : 'Preparing pitch practice'}
+          </h3>
+          <p className="text-xs text-text-tertiary mt-1">
+            This can take a moment while we tailor the session to your deck.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-2">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-sm text-text-secondary">
+            <span
+              className="w-2 h-2 rounded-full bg-brand animate-pulse"
+              style={{ animationDelay: `${index * 180}ms` }}
+            />
+            {step}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 h-1.5 bg-surface-sunken rounded-full overflow-hidden">
+        <div className="h-full w-2/3 bg-brand rounded-full animate-pulse" />
+      </div>
     </div>
   )
 }

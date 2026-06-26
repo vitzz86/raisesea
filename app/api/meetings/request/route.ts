@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isSuperAdmin } from '@/lib/super-admin'
 import { getBusyBlocks } from '@/lib/google-calendar'
 import { computeFreeSlots, type AvailabilityWindow, type SoftHeldSlot } from '@/lib/slot-computation'
 
@@ -17,6 +18,9 @@ const MIN_LEAD_MS = 48 * 3600 * 1000  // 48 hours
 export async function POST(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (!(await isSuperAdmin(user))) {
+    return NextResponse.json({ error: 'This feature is currently available to admins only' }, { status: 403 })
+  }
 
   let body: {
     vc_profile_id?:   string

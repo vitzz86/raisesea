@@ -10,7 +10,7 @@ import type { Debrief, DimensionScore, SlideBreakdown, ContentDimension, Questio
 
 type TabId = 'overview' | 'dimensions' | 'content' | 'slides' | 'questions' | 'other' | 'priorities'
 
-export default function DebriefView({ sessionId, mode, durationMin, company, companySlug, debrief, startedAt, isGenerating, status }: {
+export default function DebriefView({ sessionId, mode, durationMin, company, companySlug, debrief, startedAt, isGenerating, status, canUseExpertFeatures }: {
   sessionId: string
   mode: 'pitch' | 'qa'
   durationMin: number
@@ -20,6 +20,7 @@ export default function DebriefView({ sessionId, mode, durationMin, company, com
   startedAt: string
   isGenerating: boolean
   status: string
+  canUseExpertFeatures: boolean
 }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
@@ -131,7 +132,7 @@ export default function DebriefView({ sessionId, mode, durationMin, company, com
           (regardless of which tab is active) so it always feels like
           the closing section of the debrief — the natural transition
           to the next step in the founder's journey. */}
-      <NextActionsForDebrief debrief={debrief} mode={mode} />
+      <NextActionsForDebrief debrief={debrief} mode={mode} canUseExpertFeatures={canUseExpertFeatures} />
 
       <p className="text-[11px] text-text-disabled text-center mt-8">
         Your audio was never stored — only the text transcript powered this debrief.
@@ -163,7 +164,15 @@ function buildTabs(mode: 'pitch' | 'qa', d: Debrief): { id: TabId; label: string
 }
 
 // ─── What's next CTAs (directed-graph wiring) ──────────────────────
-function NextActionsForDebrief({ debrief, mode }: { debrief: Debrief; mode: 'pitch' | 'qa' }) {
+function NextActionsForDebrief({
+  debrief,
+  mode,
+  canUseExpertFeatures,
+}: {
+  debrief: Debrief
+  mode: 'pitch' | 'qa'
+  canUseExpertFeatures: boolean
+}) {
   // Find the weakest dimension to suggest a focused re-run
   const weakest = useMemo(() => {
     const dims = Object.entries(debrief.dimensions || {})
@@ -179,6 +188,7 @@ function NextActionsForDebrief({ debrief, mode }: { debrief: Debrief; mode: 'pit
     retryIcon:  <RotateCw className="w-5 h-5" strokeWidth={1.5} />,
     switchIcon: <MessageSquareMore className="w-5 h-5" strokeWidth={1.5} />,
     expertIcon: <Users className="w-4 h-4" strokeWidth={1.5} />,
+    includeExpertAction: canUseExpertFeatures,
   })
 
   if (actions.length === 0) return null

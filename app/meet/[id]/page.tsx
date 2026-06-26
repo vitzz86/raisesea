@@ -1,12 +1,11 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import { Card, Button } from '@/components/ui'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import TopBar from '@/components/TopBar'
 import DashboardShell from '@/components/DashboardShell'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +22,10 @@ export default async function ExpertDetailPage({
 }) {
   const { id } = await params
   const user = await getSessionUser()
+  if (!user) redirect(`/login?redirectTo=/meet/${id}`)
+
+  const admin = await isSuperAdmin(user)
+  if (!admin) redirect('/dashboard')
 
   const { data: expert } = await supabaseAdmin
     .from('vc_profiles')
@@ -169,26 +172,15 @@ export default async function ExpertDetailPage({
     </div>
   )
 
-  // ── Signed-in: wrap in dashboard shell
-  if (user) {
-    const supabase = await createSupabaseServerClient()
-    const { data: profile } = await supabase
-      .from('user_profiles').select('full_name, company_name').eq('id', user.id).maybeSingle()
-    const admin = await isSuperAdmin(user)
-    const isExpert = await isApprovedExpert(user.id)
-    return (
-      <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="experts">
-        {body}
-      </DashboardShell>
-    )
-  }
+  const supabase = await createSupabaseServerClient()
+  const { data: profile } = await supabase
+    .from('user_profiles').select('full_name, company_name').eq('id', user.id).maybeSingle()
+  const isExpert = await isApprovedExpert(user.id)
 
-  // ── Anonymous: top bar only
   return (
-    <div className="min-h-screen bg-surface-page">
-      <TopBar />
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">{body}</div>
-    </div>
+    <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="experts">
+      {body}
+    </DashboardShell>
   )
 }
 

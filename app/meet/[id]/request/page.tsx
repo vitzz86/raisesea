@@ -18,6 +18,9 @@ export default async function RequestMeetingPage({
 
   if (!user) redirect(`/login?redirectTo=/meet/${vcProfileId}/request`)
 
+  const admin = await isSuperAdmin(user)
+  if (!admin) redirect('/dashboard')
+
   const { data: vc } = await supabaseAdmin
     .from('vc_profiles')
     .select('id, display_name, fund_or_firm, title, avatar_url, application_status, is_listed, calendar_connected')
@@ -40,7 +43,6 @@ export default async function RequestMeetingPage({
     .eq('id', user.id)
     .maybeSingle()
 
-  const admin = await isSuperAdmin(user)
   const isExpert = await isApprovedExpert(user.id)
 
   return (

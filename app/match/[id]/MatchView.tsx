@@ -29,9 +29,10 @@ type TabId = typeof TABS[number]['id']
 
 type MatchViewProps = {
   isOwner: boolean   // true if the signed-in user owns this submission
+  canUseExpertFeatures: boolean
 }
 
-export default function MatchView({ isOwner }: MatchViewProps) {
+export default function MatchView({ isOwner, canUseExpertFeatures }: MatchViewProps) {
   const params    = useParams()
   const slug      = params?.id as string
   const [sub, setSub]         = useState<Record<string, unknown> | null>(null)
@@ -251,19 +252,26 @@ export default function MatchView({ isOwner }: MatchViewProps) {
       {/* What's next — journey-ending CTAs. Renders below all tabs
           (regardless of which tab is active) so it always feels like
           the closing section of the deck analysis. */}
-      <NextActionsForDeckAnalysis deckAnalysis={deckAnalysis} />
+      <NextActionsForDeckAnalysis deckAnalysis={deckAnalysis} canUseExpertFeatures={canUseExpertFeatures} />
     </div>
   )
 }
 
 // ─── What's next: journey-closing CTAs for deck analysis ────────────
-function NextActionsForDeckAnalysis({ deckAnalysis }: { deckAnalysis: Record<string, unknown> | null }) {
+function NextActionsForDeckAnalysis({
+  deckAnalysis,
+  canUseExpertFeatures,
+}: {
+  deckAnalysis: Record<string, unknown> | null
+  canUseExpertFeatures: boolean
+}) {
   if (!deckAnalysis) return null
   const score = typeof deckAnalysis.overall_score === 'number' ? deckAnalysis.overall_score : null
   const actions = deckAnalysisNextActions({
     deckAnalysis,
     practiceIcon: <Target className="w-5 h-5" strokeWidth={1.5} />,
     expertIcon:   <Users className="w-4 h-4" strokeWidth={1.5} />,
+    includeExpertAction: canUseExpertFeatures,
   })
   if (actions.length === 0) return null
 
