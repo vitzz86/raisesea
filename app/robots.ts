@@ -1,7 +1,25 @@
 import type { MetadataRoute } from 'next'
-import { NEWS_JSON_PATH, NEWS_MARKDOWN_PATH, NEWS_RSS_PATH, getPublicBaseUrl } from '@/lib/public-news'
+import {
+  NEWS_JSON_PATH,
+  NEWS_MARKDOWN_PATH,
+  NEWS_RSS_PATH,
+  NEWS_TEXT_ALIAS_PATH,
+  NEWS_TEXT_PATH,
+  getPublicBaseUrl,
+} from '@/lib/public-news'
 
-const allowPublic = ['/', '/news', '/news/', NEWS_MARKDOWN_PATH, NEWS_JSON_PATH, NEWS_RSS_PATH, '/llms.txt', '/glossary']
+const allowPublic = [
+  '/',
+  '/news',
+  '/news/',
+  NEWS_TEXT_PATH,
+  NEWS_TEXT_ALIAS_PATH,
+  NEWS_MARKDOWN_PATH,
+  NEWS_JSON_PATH,
+  NEWS_RSS_PATH,
+  '/llms.txt',
+  '/glossary',
+]
 const disallowPrivate = [
   '/admin',
   '/api/',
@@ -47,7 +65,7 @@ export default function robots(): MetadataRoute.Robots {
       },
       {
         userAgent: 'Googlebot-News',
-        allow: ['/news', '/news/', NEWS_MARKDOWN_PATH, NEWS_JSON_PATH, NEWS_RSS_PATH],
+        allow: ['/news', '/news/', NEWS_TEXT_PATH, NEWS_TEXT_ALIAS_PATH, NEWS_MARKDOWN_PATH, NEWS_JSON_PATH, NEWS_RSS_PATH],
         disallow: disallowPrivate,
       },
       {

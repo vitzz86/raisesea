@@ -1,5 +1,5 @@
 import {
-  buildNewsJsonPayload,
+  buildNewsPlainText,
   getCurrentPublicNewsDigest,
   getPublicBaseUrl,
   publicNewsHeaders,
@@ -11,11 +11,11 @@ export const revalidate = 600
 
 export async function GET() {
   const digest = await getCurrentPublicNewsDigest()
-  const payload = buildNewsJsonPayload(digest, getPublicBaseUrl())
+  const text = buildNewsPlainText(digest, getPublicBaseUrl())
 
-  return Response.json(payload, {
-    headers: publicNewsHeaders('application/json; charset=utf-8', {
-      filename: 'raisesea-news.json',
+  return new Response(text, {
+    headers: publicNewsHeaders('text/plain; charset=utf-8', {
+      filename: 'raisesea-news-latest.txt',
     }),
   })
 }

@@ -1,4 +1,13 @@
-import { NEWS_JSON_PATH, NEWS_MARKDOWN_PATH, NEWS_RSS_PATH, getPublicBaseUrl } from '@/lib/public-news'
+import {
+  NEWS_JSON_PATH,
+  NEWS_MARKDOWN_PATH,
+  NEWS_RSS_PATH,
+  NEWS_TEXT_ALIAS_PATH,
+  NEWS_TEXT_PATH,
+  getPublicBaseUrl,
+  publicNewsHeaders,
+  publicNewsOptionsResponse,
+} from '@/lib/public-news'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 3600
@@ -11,7 +20,9 @@ export async function GET() {
 
 Important notes for AI agents and crawlers:
 - The public weekly news digest is available at ${baseUrl}/news.
+- The simplest plain-text digest for AI readers is available at ${baseUrl}${NEWS_TEXT_PATH}.
 - The complete AI-readable digest is available at ${baseUrl}${NEWS_MARKDOWN_PATH}.
+- A no-extension plain-text alias is available at ${baseUrl}${NEWS_TEXT_ALIAS_PATH}.
 - Structured JSON for every approved story is available at ${baseUrl}${NEWS_JSON_PATH}.
 - RSS is available at ${baseUrl}${NEWS_RSS_PATH}.
 - Public news content includes headlines, summaries, why-it-matters notes, source links, category, sector, country, stage, amount, lead investor, and publish date when available.
@@ -21,7 +32,9 @@ Important notes for AI agents and crawlers:
 
 - [RaiseSEA home](${baseUrl}/): Product overview for SEA founders.
 - [Weekly SEA fundraising news](${baseUrl}/news): Human-readable digest.
+- [Plain text AI digest](${baseUrl}${NEWS_TEXT_PATH}): Lowest-friction full digest for AI readers.
 - [Latest digest in Markdown](${baseUrl}${NEWS_MARKDOWN_PATH}): Full AI-readable digest.
+- [No-extension AI digest alias](${baseUrl}${NEWS_TEXT_ALIAS_PATH}): Plain text alias for crawlers that dislike dotted URLs.
 - [Latest digest in JSON](${baseUrl}${NEWS_JSON_PATH}): Structured full digest.
 - [News RSS feed](${baseUrl}${NEWS_RSS_PATH}): RSS feed for current approved stories.
 - [Fundraising glossary](${baseUrl}/glossary): Plain-English fundraising terms.
@@ -33,9 +46,11 @@ Important notes for AI agents and crawlers:
 `
 
   return new Response(body, {
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-    },
+    headers: publicNewsHeaders('text/plain; charset=utf-8', {
+      cache: 'long',
+      filename: 'llms.txt',
+    }),
   })
 }
+
+export const OPTIONS = publicNewsOptionsResponse

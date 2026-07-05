@@ -1,4 +1,10 @@
-import { buildNewsRssXml, getCurrentPublicNewsDigest, getPublicBaseUrl } from '@/lib/public-news'
+import {
+  buildNewsRssXml,
+  getCurrentPublicNewsDigest,
+  getPublicBaseUrl,
+  publicNewsHeaders,
+  publicNewsOptionsResponse,
+} from '@/lib/public-news'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 600
@@ -8,9 +14,10 @@ export async function GET() {
   const xml = buildNewsRssXml(digest, getPublicBaseUrl())
 
   return new Response(xml, {
-    headers: {
-      'Content-Type': 'application/rss+xml; charset=utf-8',
-      'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600',
-    },
+    headers: publicNewsHeaders('application/rss+xml; charset=utf-8', {
+      filename: 'raisesea-news.xml',
+    }),
   })
 }
+
+export const OPTIONS = publicNewsOptionsResponse

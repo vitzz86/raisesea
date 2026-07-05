@@ -45,8 +45,37 @@ export type PublicNewsDigest = {
 }
 
 export const NEWS_MARKDOWN_PATH = '/news/latest.md'
+export const NEWS_TEXT_PATH = '/ai-news.txt'
+export const NEWS_TEXT_ALIAS_PATH = '/news/latest'
 export const NEWS_JSON_PATH = '/news.json'
 export const NEWS_RSS_PATH = '/news/rss.xml'
+
+const NEWS_CACHE_CONTROL = 'public, max-age=0, s-maxage=600, stale-while-revalidate=3600'
+const NEWS_LONG_CACHE_CONTROL = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
+
+export function publicNewsHeaders(contentType: string, options?: { cache?: 'short' | 'long'; filename?: string }) {
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    'Cache-Control': options?.cache === 'long' ? NEWS_LONG_CACHE_CONTROL : NEWS_CACHE_CONTROL,
+    'CDN-Cache-Control': options?.cache === 'long' ? NEWS_LONG_CACHE_CONTROL : NEWS_CACHE_CONTROL,
+    'Vercel-CDN-Cache-Control': options?.cache === 'long' ? NEWS_LONG_CACHE_CONTROL : NEWS_CACHE_CONTROL,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Headers': 'Accept, Content-Type, User-Agent',
+    'Content-Disposition': options?.filename ? `inline; filename="${options.filename}"` : 'inline',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Robots-Tag': 'index, follow',
+  }
+
+  return headers
+}
+
+export function publicNewsOptionsResponse() {
+  return new Response(null, {
+    status: 204,
+    headers: publicNewsHeaders('text/plain; charset=utf-8'),
+  })
+}
 
 const NEWS_SELECT = [
   'id',
@@ -225,6 +254,7 @@ export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicB
     `> ${digest.dateRange}. Full approved weekly digest for AI crawlers, search engines, and readers.`,
     '',
     `Canonical HTML: ${baseUrl}/news`,
+    `Plain text for AI readers: ${baseUrl}${NEWS_TEXT_PATH}`,
     `Structured JSON: ${baseUrl}${NEWS_JSON_PATH}`,
     `RSS: ${baseUrl}${NEWS_RSS_PATH}`,
     `Generated: ${digest.generatedAt}`,
@@ -284,9 +314,78 @@ export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicB
   return `${lines.join('\n').trim()}\n`
 }
 
+export function buildNewsPlainText(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl()): string {
+  const lines: string[] = [
+    'RaiseSEA Weekly SEA Fundraising Digest',
+    '',
+    `${digest.dateRange}. Full approved weekly digest for AI readers, search engines, and public readers.`,
+    '',
+    `Canonical HTML: ${baseUrl}/news`,
+    `Plain text URL: ${baseUrl}${NEWS_TEXT_PATH}`,
+    `Markdown URL: ${baseUrl}${NEWS_MARKDOWN_PATH}`,
+    `Structured JSON URL: ${baseUrl}${NEWS_JSON_PATH}`,
+    `RSS URL: ${baseUrl}${NEWS_RSS_PATH}`,
+    `Generated: ${digest.generatedAt}`,
+    '',
+  ]
+
+  if (digest.editorsTake) {
+    lines.push("EDITOR'S TAKE", '')
+    if (digest.editorsTake.headline) lines.push(digest.editorsTake.headline, '')
+    if (digest.editorsTake.body) lines.push(digest.editorsTake.body, '')
+    if (digest.editorsTake.takeaway) lines.push(`Action signal: ${digest.editorsTake.takeaway}`, '')
+  }
+
+  lines.push('THIS WEEK AT A GLANCE', '')
+  for (const value of Object.values(digest.glance)) {
+    if (value) lines.push(`- ${value}`)
+  }
+  lines.push('')
+
+  if (digest.categorizedTopStories) {
+    lines.push('TOP STORIES THIS WEEK', '')
+    for (const [category, story] of Object.entries(digest.categorizedTopStories)) {
+      if (!story) continue
+      lines.push(category.toUpperCase())
+      lines.push(`Headline: ${story.headline}`)
+      if (story.why) lines.push(`Why it matters: ${story.why}`)
+      if (story.sector) lines.push(`Sector: ${story.sector}`)
+      if (story.country) lines.push(`Country: ${story.country}`)
+      if (story.sources?.length) {
+        lines.push(`Sources: ${story.sources.map(src => `${src.name} - ${src.url}`).join('; ')}`)
+      }
+      lines.push('')
+    }
+  }
+
+  lines.push(`ALL APPROVED STORIES (${digest.items.length})`, '')
+  const byCategory = groupByCategory(digest.items)
+  for (const [category, items] of Object.entries(byCategory)) {
+    if (items.length === 0) continue
+    lines.push(`${categoryLabel(category).toUpperCase()} (${items.length})`, '')
+    for (const item of items) {
+      lines.push(newsItemHeadline(item))
+      if (item.published_at) lines.push(`Published: ${item.published_at}`)
+      lines.push(`Category: ${categoryLabel(item.category)}`)
+      lines.push(`Region scope: ${item.region_scope || 'sea'}`)
+      if (item.country) lines.push(`Country: ${item.country}`)
+      if (item.sector) lines.push(`Sector: ${item.sector}`)
+      if (item.stage) lines.push(`Stage: ${item.stage}`)
+      if (item.amount_usd) lines.push(`Amount: ${formatUSD(item.amount_usd)}`)
+      if (item.lead_investor) lines.push(`Lead investor: ${item.lead_investor}`)
+      if (item.ai_summary) lines.push('', `Summary: ${item.ai_summary}`)
+      if (item.ai_why_it_matters) lines.push('', `Why it matters: ${item.ai_why_it_matters}`)
+      lines.push('', `Source: ${item.source_name || 'Source'} - ${item.source_url}`, '')
+    }
+  }
+
+  return `${lines.join('\n').trim()}\n`
+}
+
 export function buildNewsJsonLd(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl()) {
   const pageUrl = `${baseUrl}/news`
   const markdownUrl = `${baseUrl}${NEWS_MARKDOWN_PATH}`
+  const textUrl = `${baseUrl}${NEWS_TEXT_PATH}`
   const jsonUrl = `${baseUrl}${NEWS_JSON_PATH}`
 
   return {
@@ -307,7 +406,7 @@ export function buildNewsJsonLd(digest: PublicNewsDigest, baseUrl = getPublicBas
         dateModified: digest.generatedAt,
         isPartOf: { '@id': `${baseUrl}/#website` },
         mainEntity: { '@id': `${pageUrl}#item-list` },
-        sameAs: [markdownUrl, jsonUrl],
+        sameAs: [textUrl, markdownUrl, jsonUrl],
       },
       {
         '@type': 'ItemList',
@@ -345,6 +444,7 @@ export function buildNewsJsonPayload(digest: PublicNewsDigest, baseUrl = getPubl
   return {
     site: 'RaiseSEA',
     canonical_url: `${baseUrl}/news`,
+    plain_text_url: `${baseUrl}${NEWS_TEXT_PATH}`,
     markdown_url: `${baseUrl}${NEWS_MARKDOWN_PATH}`,
     rss_url: `${baseUrl}${NEWS_RSS_PATH}`,
     generated_at: digest.generatedAt,

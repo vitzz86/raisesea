@@ -1,5 +1,12 @@
 import type { MetadataRoute } from 'next'
-import { NEWS_JSON_PATH, NEWS_MARKDOWN_PATH, NEWS_RSS_PATH, getPublicBaseUrl } from '@/lib/public-news'
+import {
+  NEWS_JSON_PATH,
+  NEWS_MARKDOWN_PATH,
+  NEWS_RSS_PATH,
+  NEWS_TEXT_ALIAS_PATH,
+  NEWS_TEXT_PATH,
+  getPublicBaseUrl,
+} from '@/lib/public-news'
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getPublicBaseUrl()
@@ -17,6 +24,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: now,
       changeFrequency: 'daily',
       priority: 0.95,
+    },
+    {
+      url: `${baseUrl}${NEWS_TEXT_PATH}`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.92,
+    },
+    {
+      url: `${baseUrl}${NEWS_TEXT_ALIAS_PATH}`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.9,
     },
     {
       url: `${baseUrl}${NEWS_MARKDOWN_PATH}`,

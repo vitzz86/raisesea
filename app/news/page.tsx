@@ -10,6 +10,8 @@ import {
   NEWS_JSON_PATH,
   NEWS_MARKDOWN_PATH,
   NEWS_RSS_PATH,
+  NEWS_TEXT_ALIAS_PATH,
+  NEWS_TEXT_PATH,
   buildNewsJsonLd,
   escapeJsonForHtml,
   getCurrentPublicNewsDigest,
@@ -31,6 +33,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://www.raisesea.com/news',
     types: {
+      'text/plain': 'https://www.raisesea.com/ai-news.txt',
       'text/markdown': 'https://www.raisesea.com/news/latest.md',
       'application/json': 'https://www.raisesea.com/news.json',
       'application/rss+xml': 'https://www.raisesea.com/news/rss.xml',
@@ -72,11 +75,15 @@ export default async function NewsPage({
   const machineLinks = (
     <div className="mb-5 rounded-xl border border-border bg-white px-4 py-3 text-xs text-text-tertiary">
       <span className="font-medium text-text-primary">Crawler-friendly full digest:</span>{' '}
+      <a href={NEWS_TEXT_PATH} className="text-brand hover:underline">Plain text</a>
+      {' · '}
       <a href={NEWS_MARKDOWN_PATH} className="text-brand hover:underline">Markdown</a>
       {' · '}
       <a href={NEWS_JSON_PATH} className="text-brand hover:underline">JSON</a>
       {' · '}
       <a href={NEWS_RSS_PATH} className="text-brand hover:underline">RSS</a>
+      {' · '}
+      <a href={NEWS_TEXT_ALIAS_PATH} className="text-brand hover:underline">AI alias</a>
       <span className="block mt-1">
         These files include every approved story, summary, why-it-matters note, source, category, sector, country, and publish date from this page.
       </span>
