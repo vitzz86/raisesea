@@ -12,6 +12,7 @@ const allowPublic = [
   '/',
   '/news',
   '/news/',
+  '/ai-news/',
   NEWS_TEXT_PATH,
   NEWS_TEXT_ALIAS_PATH,
   NEWS_MARKDOWN_PATH,
@@ -65,7 +66,7 @@ export default function robots(): MetadataRoute.Robots {
       },
       {
         userAgent: 'Googlebot-News',
-        allow: ['/news', '/news/', NEWS_TEXT_PATH, NEWS_TEXT_ALIAS_PATH, NEWS_MARKDOWN_PATH, NEWS_JSON_PATH, NEWS_RSS_PATH],
+        allow: ['/news', '/news/', '/ai-news/', NEWS_TEXT_PATH, NEWS_TEXT_ALIAS_PATH, NEWS_MARKDOWN_PATH, NEWS_JSON_PATH, NEWS_RSS_PATH],
         disallow: disallowPrivate,
       },
       {

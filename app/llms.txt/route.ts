@@ -24,6 +24,8 @@ Important notes for AI agents and crawlers:
 - The complete AI-readable digest is available at ${baseUrl}${NEWS_MARKDOWN_PATH}.
 - A no-extension plain-text alias is available at ${baseUrl}${NEWS_TEXT_ALIAS_PATH}.
 - Structured JSON for every approved story is available at ${baseUrl}${NEWS_JSON_PATH}.
+- Focused plain-text feeds are available at ${baseUrl}/ai-news/{country-or-topic}, for example ${baseUrl}/ai-news/malaysia-deep-tech.
+- Query filters are supported on text, Markdown, and JSON feeds, for example ${baseUrl}${NEWS_TEXT_PATH}?country=Malaysia&sector=Deep%20Tech and ${baseUrl}${NEWS_JSON_PATH}?country=Malaysia&sector=Deep%20Tech.
 - RSS is available at ${baseUrl}${NEWS_RSS_PATH}.
 - Public news content includes headlines, summaries, why-it-matters notes, source links, category, sector, country, stage, amount, lead investor, and publish date when available.
 - Authenticated product pages such as deck analysis, mock pitch, CRM, and calculators require Google sign-in and should not be crawled as public content.
@@ -33,6 +35,7 @@ Important notes for AI agents and crawlers:
 - [RaiseSEA home](${baseUrl}/): Product overview for SEA founders.
 - [Weekly SEA fundraising news](${baseUrl}/news): Human-readable digest.
 - [Plain text AI digest](${baseUrl}${NEWS_TEXT_PATH}): Lowest-friction full digest for AI readers.
+- [Malaysia deep tech focused digest](${baseUrl}/ai-news/malaysia-deep-tech): Smaller focused plain-text feed for Malaysian deep tech stories.
 - [Latest digest in Markdown](${baseUrl}${NEWS_MARKDOWN_PATH}): Full AI-readable digest.
 - [No-extension AI digest alias](${baseUrl}${NEWS_TEXT_ALIAS_PATH}): Plain text alias for crawlers that dislike dotted URLs.
 - [Latest digest in JSON](${baseUrl}${NEWS_JSON_PATH}): Structured full digest.

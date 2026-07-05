@@ -44,6 +44,16 @@ export type PublicNewsDigest = {
   }
 }
 
+export type PublicNewsFilters = {
+  country?: string
+  sector?: string
+  category?: string
+  stage?: string
+  investor?: string
+  q?: string
+  limit?: number
+}
+
 export const NEWS_MARKDOWN_PATH = '/news/latest.md'
 export const NEWS_TEXT_PATH = '/ai-news.txt'
 export const NEWS_TEXT_ALIAS_PATH = '/news/latest'
@@ -75,6 +85,126 @@ export function publicNewsOptionsResponse() {
     status: 204,
     headers: publicNewsHeaders('text/plain; charset=utf-8'),
   })
+}
+
+export function publicNewsFiltersFromSearchParams(searchParams: URLSearchParams): PublicNewsFilters {
+  const text = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = searchParams.get(key)?.trim()
+      if (value) return value
+    }
+    return undefined
+  }
+
+  const limitValue = Number.parseInt(searchParams.get('limit') || '', 10)
+
+  return normalizePublicNewsFilters({
+    country: text('country', 'market'),
+    sector: text('sector', 'industry'),
+    category: text('category', 'type'),
+    stage: text('stage'),
+    investor: text('investor', 'lead_investor'),
+    q: text('q', 'query', 'search'),
+    limit: Number.isFinite(limitValue) ? Math.max(1, Math.min(limitValue, 100)) : undefined,
+  })
+}
+
+export function publicNewsFiltersFromFocusSlug(slug: string): PublicNewsFilters {
+  const normalized = slug
+    .replace(/\.txt$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  const filters: PublicNewsFilters = { limit: 50 }
+  const countries: Array<[string, string]> = [
+    ['southeast-asia', 'Southeast Asia'],
+    ['united-states', 'United States'],
+    ['hong-kong', 'Hong Kong'],
+    ['timor-leste', 'Timor-Leste'],
+    ['singapore', 'Singapore'],
+    ['indonesia', 'Indonesia'],
+    ['malaysia', 'Malaysia'],
+    ['thailand', 'Thailand'],
+    ['philippines', 'Philippines'],
+    ['vietnam', 'Vietnam'],
+    ['cambodia', 'Cambodia'],
+    ['myanmar', 'Myanmar'],
+    ['brunei', 'Brunei'],
+    ['china', 'China'],
+    ['india', 'India'],
+  ]
+  const sectors: Array<[string, string]> = [
+    ['deep-tech', 'Deep Tech'],
+    ['ai-ml', 'AI/ML'],
+    ['fintech', 'Fintech'],
+    ['e-commerce', 'E-commerce'],
+    ['ecommerce', 'E-commerce'],
+    ['cleantech', 'Cleantech'],
+    ['climate', 'Cleantech'],
+    ['insurtech', 'Insurtech'],
+    ['consumer', 'Consumer'],
+    ['edtech', 'Edtech'],
+    ['healthtech', 'Healthtech'],
+    ['agritech', 'Agritech'],
+  ]
+
+  const country = countries.find(([key]) => normalized.includes(key))
+  const sector = sectors.find(([key]) => normalized.includes(key))
+  if (country) filters.country = country[1]
+  if (sector) filters.sector = sector[1]
+  if (/\b(fundraising|funding|deals|raises|raised)\b/.test(normalized)) filters.category = 'fundraising'
+  if (/\b(tech-product|product-news|category-tech)\b/.test(normalized)) filters.category = 'tech'
+  if (/\b(policy|economic|regulation|regulatory)\b/.test(normalized)) filters.category = 'policy'
+  if (/\b(exit|ipo|acquisition|acquires)\b/.test(normalized)) filters.category = 'exit'
+
+  return normalizePublicNewsFilters(filters)
+}
+
+export function hasPublicNewsFilters(filters: PublicNewsFilters): boolean {
+  return Boolean(filters.country || filters.sector || filters.category || filters.stage || filters.investor || filters.q)
+}
+
+export function describePublicNewsFilters(filters: PublicNewsFilters): string {
+  const parts = [
+    filters.country ? `country: ${filters.country}` : null,
+    filters.sector ? `sector: ${filters.sector}` : null,
+    filters.category ? `category: ${categoryLabel(filters.category)}` : null,
+    filters.stage ? `stage: ${filters.stage}` : null,
+    filters.investor ? `investor: ${filters.investor}` : null,
+    filters.q ? `query: ${filters.q}` : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(', ') : 'all approved stories'
+}
+
+export function filterPublicNewsDigest(digest: PublicNewsDigest, filters: PublicNewsFilters): PublicNewsDigest {
+  const normalized = normalizePublicNewsFilters(filters)
+  let items = digest.items.filter(item => {
+    if (normalized.country && !sameValue(item.country, normalized.country)) return false
+    if (normalized.sector && !sameValue(item.sector, normalized.sector)) return false
+    if (normalized.category && !sameValue(item.category, normalized.category)) return false
+    if (normalized.stage && !includesValue(item.stage, normalized.stage)) return false
+    if (normalized.investor && !includesValue(item.lead_investor, normalized.investor)) return false
+    if (normalized.q && !matchesSearch(item, normalized.q)) return false
+    return true
+  })
+
+  if (normalized.limit) items = items.slice(0, normalized.limit)
+
+  return {
+    ...digest,
+    items,
+    categorizedTopStories: null,
+    topStories: legacyTopStories(items as StoryItem[]),
+    glance: computeGlance(items),
+    trending: computeTrending(items),
+    weekStats: {
+      dealCount: items.filter(i => i.category === 'fundraising').length,
+      totalRaised: items.reduce((sum, i) => sum + (i.amount_usd || 0), 0),
+      sectorCount: new Set(items.map(i => i.sector).filter(Boolean)).size,
+    },
+  }
 }
 
 const NEWS_SELECT = [
@@ -247,9 +377,13 @@ export function computeTrending(items: Array<{ sector: string | null; lead_inves
   }
 }
 
-export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl()): string {
+export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl(), options?: {
+  focused?: boolean
+  filterLabel?: string
+  title?: string
+}): string {
   const lines: string[] = [
-    '# RaiseSEA Weekly SEA Fundraising Digest',
+    `# ${options?.title || 'RaiseSEA Weekly SEA Fundraising Digest'}`,
     '',
     `> ${digest.dateRange}. Full approved weekly digest for AI crawlers, search engines, and readers.`,
     '',
@@ -261,20 +395,24 @@ export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicB
     '',
   ]
 
-  if (digest.editorsTake) {
+  if (options?.filterLabel) {
+    lines.push(`Filter: ${escapeMarkdown(options.filterLabel)}`, '')
+  }
+
+  if (!options?.focused && digest.editorsTake) {
     lines.push('## Editor\'s Take', '')
     if (digest.editorsTake.headline) lines.push(`### ${escapeMarkdown(digest.editorsTake.headline)}`, '')
     if (digest.editorsTake.body) lines.push(escapeMarkdown(digest.editorsTake.body), '')
     if (digest.editorsTake.takeaway) lines.push(`Action signal: ${escapeMarkdown(digest.editorsTake.takeaway)}`, '')
   }
 
-  lines.push('## This Week At A Glance', '')
+  lines.push(options?.focused ? '## Filtered Results At A Glance' : '## This Week At A Glance', '')
   for (const value of Object.values(digest.glance)) {
     if (value) lines.push(`- ${escapeMarkdown(value)}`)
   }
   lines.push('')
 
-  if (digest.categorizedTopStories) {
+  if (!options?.focused && digest.categorizedTopStories) {
     lines.push('## Top Stories This Week', '')
     for (const [category, story] of Object.entries(digest.categorizedTopStories)) {
       if (!story) continue
@@ -314,9 +452,13 @@ export function buildNewsMarkdown(digest: PublicNewsDigest, baseUrl = getPublicB
   return `${lines.join('\n').trim()}\n`
 }
 
-export function buildNewsPlainText(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl()): string {
+export function buildNewsPlainText(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl(), options?: {
+  focused?: boolean
+  filterLabel?: string
+  title?: string
+}): string {
   const lines: string[] = [
-    'RaiseSEA Weekly SEA Fundraising Digest',
+    options?.title || 'RaiseSEA Weekly SEA Fundraising Digest',
     '',
     `${digest.dateRange}. Full approved weekly digest for AI readers, search engines, and public readers.`,
     '',
@@ -329,20 +471,24 @@ export function buildNewsPlainText(digest: PublicNewsDigest, baseUrl = getPublic
     '',
   ]
 
-  if (digest.editorsTake) {
+  if (options?.filterLabel) {
+    lines.push(`Filter: ${options.filterLabel}`, '')
+  }
+
+  if (!options?.focused && digest.editorsTake) {
     lines.push("EDITOR'S TAKE", '')
     if (digest.editorsTake.headline) lines.push(digest.editorsTake.headline, '')
     if (digest.editorsTake.body) lines.push(digest.editorsTake.body, '')
     if (digest.editorsTake.takeaway) lines.push(`Action signal: ${digest.editorsTake.takeaway}`, '')
   }
 
-  lines.push('THIS WEEK AT A GLANCE', '')
+  lines.push(options?.focused ? 'FILTERED RESULTS AT A GLANCE' : 'THIS WEEK AT A GLANCE', '')
   for (const value of Object.values(digest.glance)) {
     if (value) lines.push(`- ${value}`)
   }
   lines.push('')
 
-  if (digest.categorizedTopStories) {
+  if (!options?.focused && digest.categorizedTopStories) {
     lines.push('TOP STORIES THIS WEEK', '')
     for (const [category, story] of Object.entries(digest.categorizedTopStories)) {
       if (!story) continue
@@ -440,13 +586,18 @@ export function buildNewsJsonLd(digest: PublicNewsDigest, baseUrl = getPublicBas
   }
 }
 
-export function buildNewsJsonPayload(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl()) {
+export function buildNewsJsonPayload(digest: PublicNewsDigest, baseUrl = getPublicBaseUrl(), options?: {
+  filters?: PublicNewsFilters
+  filterLabel?: string
+}) {
   return {
     site: 'RaiseSEA',
     canonical_url: `${baseUrl}/news`,
     plain_text_url: `${baseUrl}${NEWS_TEXT_PATH}`,
     markdown_url: `${baseUrl}${NEWS_MARKDOWN_PATH}`,
     rss_url: `${baseUrl}${NEWS_RSS_PATH}`,
+    filter: options?.filterLabel || null,
+    filters: options?.filters || null,
     generated_at: digest.generatedAt,
     date_range: digest.dateRange,
     week_start: digest.weekStartIso,
@@ -529,6 +680,67 @@ export function categoryLabel(category: string): string {
     exit: 'Exit market',
   }
   return labels[category] || category
+}
+
+function normalizePublicNewsFilters(filters: PublicNewsFilters): PublicNewsFilters {
+  const categoryMap: Record<string, string> = {
+    fundraising: 'fundraising',
+    funding: 'fundraising',
+    deal: 'fundraising',
+    deals: 'fundraising',
+    tech: 'tech',
+    product: 'tech',
+    policy: 'policy',
+    economic: 'policy',
+    regulation: 'policy',
+    exit: 'exit',
+    exits: 'exit',
+    ipo: 'exit',
+  }
+  const category = filters.category ? categoryMap[normalizeComparable(filters.category)] || filters.category : undefined
+
+  return {
+    country: cleanFilter(filters.country),
+    sector: cleanFilter(filters.sector),
+    category: cleanFilter(category),
+    stage: cleanFilter(filters.stage),
+    investor: cleanFilter(filters.investor),
+    q: cleanFilter(filters.q),
+    limit: filters.limit,
+  }
+}
+
+function cleanFilter(value: string | undefined): string | undefined {
+  const cleaned = value?.trim()
+  return cleaned || undefined
+}
+
+function sameValue(actual: string | null | undefined, expected: string): boolean {
+  return normalizeComparable(actual || '') === normalizeComparable(expected)
+}
+
+function includesValue(actual: string | null | undefined, expected: string): boolean {
+  return normalizeComparable(actual || '').includes(normalizeComparable(expected))
+}
+
+function matchesSearch(item: PublicNewsItem, query: string): boolean {
+  const haystack = [
+    item.title,
+    item.company_name,
+    item.country,
+    item.sector,
+    item.stage,
+    item.lead_investor,
+    item.source_name,
+    item.ai_summary,
+    item.ai_why_it_matters,
+  ].filter(Boolean).join(' ')
+
+  return normalizeComparable(haystack).includes(normalizeComparable(query))
+}
+
+function normalizeComparable(value: string): string {
+  return value.toLowerCase().replace(/&amp;/g, '&').replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
 export function escapeMarkdown(value: string): string {

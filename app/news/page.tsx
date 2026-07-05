@@ -87,6 +87,9 @@ export default async function NewsPage({
       <span className="block mt-1">
         These files include every approved story, summary, why-it-matters note, source, category, sector, country, and publish date from this page.
       </span>
+      <span className="block mt-1">
+        Focused example: <a href="/ai-news/malaysia-deep-tech" className="text-brand hover:underline">Malaysia deep tech</a>
+      </span>
     </div>
   )
 
