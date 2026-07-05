@@ -4,6 +4,7 @@ import {
   filterPublicNewsDigest,
   getCurrentPublicNewsDigest,
   getPublicBaseUrl,
+  type PublicNewsFilters,
   publicNewsFiltersFromFocusSlug,
   publicNewsFiltersFromSearchParams,
   publicNewsHeaders,
@@ -20,7 +21,15 @@ export async function GET(
   const { focus } = await params
   const slugFilters = publicNewsFiltersFromFocusSlug(focus)
   const queryFilters = publicNewsFiltersFromSearchParams(new URL(request.url).searchParams)
-  const filters = { ...slugFilters, ...queryFilters }
+  const filters: PublicNewsFilters = {
+    country: queryFilters.country ?? slugFilters.country,
+    sector: queryFilters.sector ?? slugFilters.sector,
+    category: queryFilters.category ?? slugFilters.category,
+    stage: queryFilters.stage ?? slugFilters.stage,
+    investor: queryFilters.investor ?? slugFilters.investor,
+    q: queryFilters.q ?? slugFilters.q,
+    limit: queryFilters.limit ?? slugFilters.limit,
+  }
   const digest = await getCurrentPublicNewsDigest()
   const filteredDigest = filterPublicNewsDigest(digest, filters)
   const filterLabel = describePublicNewsFilters(filters)
