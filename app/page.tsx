@@ -16,6 +16,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { ArrowRight, Sparkles, BarChart3, Mic, Building2, Briefcase, ShieldCheck, MapPin, Newspaper, Calculator } from 'lucide-react'
@@ -34,6 +35,18 @@ import {
 } from '@/components/landing/LandingMockups'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'RaiseSEA | Fundraising Intelligence for SEA Founders',
+  description: 'Analyze your pitch deck, practice investor Q&A, match with SEA-active investors, manage your raise pipeline, and read weekly fundraising news.',
+  openGraph: {
+    title: 'RaiseSEA | Fundraising Intelligence for SEA Founders',
+    description: 'AI-powered deck analysis, mock pitch practice, investor matching, CRM, calculators, and weekly SEA fundraising intelligence.',
+    url: 'https://www.raisesea.com/',
+    siteName: 'RaiseSEA',
+    type: 'website',
+  },
+}
 
 export default async function HomePage() {
   const [user, newsPreview] = await Promise.all([

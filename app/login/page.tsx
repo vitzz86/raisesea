@@ -1,8 +1,14 @@
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { getSessionUser } from '@/lib/supabase-server'
 import LoginForm from './LoginForm'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Sign in | RaiseSEA',
+  description: 'Sign in with Google to use RaiseSEA deck analysis, mock pitch practice, investor matching, CRM, calculators, and weekly news.',
+}
 
 export default async function LoginPage({
   searchParams,

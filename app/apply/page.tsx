@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
@@ -7,6 +8,11 @@ import DashboardShell from '@/components/DashboardShell'
 import ApplyForm from './ApplyForm'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Deck Analysis | RaiseSEA',
+  description: 'Upload a pitch deck and get SEA-focused fundraising readiness scores, investor matches, market context, competitor analysis, and priority fixes.',
+}
 
 export default async function ApplyPage() {
   const user = await getSessionUser()

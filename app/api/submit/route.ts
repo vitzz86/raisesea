@@ -36,11 +36,13 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    // Auth: middleware ensures user is logged in for /apply, but /api/submit
-    // is callable directly. We treat unauthenticated submissions as legacy
-    // (anonymous) so the route doesn't break, but we strongly prefer the
-    // session user when present and use their email as authoritative.
     const sessionUser = await getSessionUser()
+    if (!sessionUser) {
+      return NextResponse.json(
+        { error: 'Please sign in with Google before running deck analysis.', code: 'AUTH_REQUIRED' },
+        { status: 401 }
+      )
+    }
 
     // ── 1. Parse JSON body ──────────────────────────────────
     // (Previously this was FormData with the PDF file. The PDF is now
@@ -323,7 +325,7 @@ export async function POST(req: NextRequest) {
 
     const submissionPayload: Record<string, unknown> = {
       unique_slug:            uniqueSlug,
-      user_id:                sessionUser?.id || null,
+      user_id:                sessionUser.id,
       company_name:           extraction?.company_name   || companyName,
       country,
       stage:                  finalStage,

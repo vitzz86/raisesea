@@ -1,14 +1,42 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
-import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import DashboardShell from '@/components/DashboardShell'
 import { NewsSignupPrompt } from '@/components/landing/NewsSignupPrompt'
 import NewsFeed from './NewsFeed'
-import { legacyTopStories, type StoryItem, type CategorizedTopStories } from '@/lib/news-clustering'
+import {
+  NEWS_JSON_PATH,
+  NEWS_MARKDOWN_PATH,
+  NEWS_RSS_PATH,
+  buildNewsJsonLd,
+  escapeJsonForHtml,
+  getCurrentPublicNewsDigest,
+  getPublicBaseUrl,
+} from '@/lib/public-news'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Weekly SEA Fundraising News | RaiseSEA',
+  description: 'A weekly digest of Southeast Asia startup fundraising, tech, policy, exits, investor moves, and market signals for founders raising capital.',
+  openGraph: {
+    title: 'Weekly SEA Fundraising News | RaiseSEA',
+    description: 'Read RaiseSEA’s weekly digest of SEA startup fundraising, tech, policy, and investor signals.',
+    url: 'https://www.raisesea.com/news',
+    siteName: 'RaiseSEA',
+    type: 'website',
+  },
+  alternates: {
+    canonical: 'https://www.raisesea.com/news',
+    types: {
+      'text/markdown': 'https://www.raisesea.com/news/latest.md',
+      'application/json': 'https://www.raisesea.com/news.json',
+      'application/rss+xml': 'https://www.raisesea.com/news/rss.xml',
+    },
+  },
+}
 
 type NewsProfile = {
   full_name: string | null
@@ -38,80 +66,46 @@ export default async function NewsPage({
     isExpert = await isApprovedExpert(user.id)
   }
 
-  // Load approved items from last 7 days (this week's feed)
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400 * 1000).toISOString()
-  const { data: items } = await supabaseAdmin
-    .from('news_items')
-    .select('id, category, title, company_name, amount_usd, stage, sector, country, lead_investor, source_url, source_name, ai_summary, ai_why_it_matters, published_at, region_scope')
-    .eq('status', 'approved')
-    .gte('published_at', sevenDaysAgo)
-    .order('published_at', { ascending: false })
-    .limit(300)
-
-  // Editor's take (most recent approved) — structured, with categorized top stories
-  const { data: takes } = await supabaseAdmin
-    .from('editors_takes')
-    .select('content, headline, body, takeaway, top_stories, approved_at')
-    .eq('status', 'approved')
-    .order('approved_at', { ascending: false })
-    .limit(1)
-  const t = takes?.[0]
-  let editorsTake: { headline: string | null; body: string | null; takeaway: string | null } | null = null
-  if (t) {
-    let body = t.body || null
-    // Fallback for OLD takes (pre-body-column): content holds headline+body+takeaway
-    // concatenated. Derive a clean body by removing the headline + takeaway.
-    if (!body && t.content) {
-      body = t.content
-      if (t.headline && body.startsWith(t.headline)) body = body.slice(t.headline.length).trim()
-      if (t.takeaway && body.endsWith(t.takeaway)) body = body.slice(0, body.length - t.takeaway.length).trim()
-      // also strip a leading duplicate headline that may remain after a blank line
-      if (t.headline && body.startsWith(t.headline)) body = body.slice(t.headline.length).trim()
-    }
-    editorsTake = { headline: t.headline || null, body: body || null, takeaway: t.takeaway || null }
-  }
-
-  // Categorized AI top stories ride on the approved take. If present, they win;
-  // otherwise we fall back to the live heuristic top-5 (legacyTopStories) below.
-  const categorizedTopStories = (t?.top_stories as CategorizedTopStories | null | undefined) || null
-
-  // Compute trending stats (last 7 days)
-  const recentItems = (items || [])
-  const trending = computeTrending(recentItems)
-
-  // "This week at a glance" summaries
-  const glance = computeGlance(recentItems)
-
-  // Live heuristic fallback (mixed top-5) — used only when the approved take
-  // has no AI top stories yet.
-  const hasCategorized = !!categorizedTopStories && Object.values(categorizedTopStories).some(Boolean)
-  const topStories = hasCategorized ? [] : legacyTopStories((items || []) as StoryItem[])
-
-  // Compute the date range for the header
-  const rangeStart = new Date(Date.now() - 7 * 86400 * 1000)
-  const rangeEnd = new Date()
-  const fmtRange = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const dateRange = `${fmtRange(rangeStart)} – ${fmtRange(rangeEnd)}, ${rangeEnd.getFullYear()}`
+  const digest = await getCurrentPublicNewsDigest()
+  const baseUrl = getPublicBaseUrl()
+  const jsonLd = buildNewsJsonLd(digest, baseUrl)
+  const machineLinks = (
+    <div className="mb-5 rounded-xl border border-border bg-white px-4 py-3 text-xs text-text-tertiary">
+      <span className="font-medium text-text-primary">Crawler-friendly full digest:</span>{' '}
+      <a href={NEWS_MARKDOWN_PATH} className="text-brand hover:underline">Markdown</a>
+      {' · '}
+      <a href={NEWS_JSON_PATH} className="text-brand hover:underline">JSON</a>
+      {' · '}
+      <a href={NEWS_RSS_PATH} className="text-brand hover:underline">RSS</a>
+      <span className="block mt-1">
+        These files include every approved story, summary, why-it-matters note, source, category, sector, country, and publish date from this page.
+      </span>
+    </div>
+  )
 
   const feed = (
-    <NewsFeed
-      items={items || []}
-      userSectors={profile?.news_sectors || []}
-      editorsTake={editorsTake}
-      trending={trending}
-      topStories={topStories}
-      categorizedTopStories={hasCategorized ? categorizedTopStories : null}
-      glance={glance}
-      dateRange={dateRange}
-      weekStats={{
-        dealCount:    recentItems.filter(i => i.category === 'fundraising').length,
-        totalRaised:  recentItems.reduce((sum, i) => sum + (i.amount_usd || 0), 0),
-        sectorCount:  new Set(recentItems.map(i => i.sector).filter(Boolean)).size,
-      }}
-      publicMode={!user}
-      className={user ? 'max-w-5xl' : 'max-w-5xl mx-auto'}
-      loginHref="/login?redirectTo=/news"
-    />
+    <>
+      {machineLinks}
+      <NewsFeed
+        items={digest.items}
+        userSectors={profile?.news_sectors || []}
+        editorsTake={digest.editorsTake}
+        trending={digest.trending}
+        topStories={digest.topStories}
+        categorizedTopStories={digest.categorizedTopStories}
+        glance={digest.glance}
+        dateRange={digest.dateRange}
+        weekStats={digest.weekStats}
+        publicMode={!user}
+        className={user ? 'max-w-5xl' : 'max-w-5xl mx-auto'}
+        loginHref="/login?redirectTo=/news"
+      />
+      <script
+        id="raisesea-news-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: escapeJsonForHtml(jsonLd) }}
+      />
+    </>
   )
 
   if (!user) {
@@ -149,49 +143,4 @@ export default async function NewsPage({
       {feed}
     </DashboardShell>
   )
-}
-
-// ─── "This week at a glance" summaries ─────────────────────────────
-type GlanceItem = {
-  category: string; sector: string | null; country: string | null
-  region_scope?: string | null; amount_usd: number | null
-}
-function computeGlance(items: GlanceItem[]) {
-  const total = items.length
-  const sea = items.filter(i => (i.region_scope || 'sea') === 'sea').length
-  const global = items.filter(i => i.region_scope === 'global').length
-
-  const tally = (key: (i: GlanceItem) => string | null) => {
-    const m: Record<string, number> = {}
-    for (const i of items) { const k = key(i); if (k) m[k] = (m[k] || 0) + 1 }
-    return Object.entries(m).sort((a, b) => b[1] - a[1])
-  }
-  const byCountry  = tally(i => i.country)
-  const bySector   = tally(i => i.sector)
-  const byCategory = tally(i => i.category)
-
-  const catLabel: Record<string, string> = { fundraising: 'fundraising', tech: 'tech', policy: 'policy/economic', exit: 'exits' }
-  const topN = (arr: [string, number][], n: number) => arr.slice(0, n).map(([k, c]) => `${k} (${c})`).join(', ')
-
-  return {
-    region:   total > 0 ? `${total} stories this week — ${sea} from Southeast Asia${global > 0 ? `, ${global} notable global signal${global > 1 ? 's' : ''}` : ''}.` : 'No stories yet this week.',
-    country:  byCountry.length  > 0 ? `Most active markets: ${topN(byCountry, 3)}.` : '',
-    category: byCategory.length > 0 ? `By type: ${byCategory.map(([k, c]) => `${catLabel[k] || k} (${c})`).join(', ')}.` : '',
-    industry: bySector.length   > 0 ? `Hottest sectors: ${topN(bySector, 3)}.` : '',
-  }
-}
-
-function computeTrending(items: { sector: string | null; lead_investor: string | null }[]) {
-  const sectorCounts: Record<string, number> = {}
-  const investorCounts: Record<string, number> = {}
-  for (const it of items) {
-    if (it.sector) sectorCounts[it.sector] = (sectorCounts[it.sector] || 0) + 1
-    if (it.lead_investor) investorCounts[it.lead_investor] = (investorCounts[it.lead_investor] || 0) + 1
-  }
-  const topSectors   = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  const topInvestors = Object.entries(investorCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  return {
-    sectors:   topSectors.map(([name, count]) => ({ name, count })),
-    investors: topInvestors.map(([name, count]) => ({ name, count })),
-  }
 }

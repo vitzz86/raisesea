@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
@@ -16,6 +17,11 @@ import Calculator from './Calculator'
 import { normalizeStageString } from '@/components/calculator/DilutionInsight'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Fundraising Calculators | RaiseSEA',
+  description: 'Model equity dilution, debt repayments, SAFE terms, and convertible note outcomes with SEA-stage context.',
+}
 
 export default async function CalculatorPage() {
   const user = await getSessionUser()

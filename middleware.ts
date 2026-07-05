@@ -6,7 +6,8 @@
 //   2. Gate protected routes — redirect to /login if not authenticated
 //
 // Protected routes (chunks 4+):  /dashboard, /settings, /apply, /raise,
-//                                /crm/*, /captable, /calculator,
+//                                /crm/*, /captable, /tools/calculator,
+//                                /mock-pitch, /meet, /experts,
 //                                /intelligence, /admin
 //
 // Public routes (no auth required): /, /login, /auth/*, /match/<slug>,
@@ -26,6 +27,10 @@ const PROTECTED_PREFIXES = [
   '/crm',
   '/captable',
   '/calculator',
+  '/tools/calculator',
+  '/mock-pitch',
+  '/meet',
+  '/experts',
   '/intelligence',
   '/admin',
 ]

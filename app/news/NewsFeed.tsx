@@ -543,7 +543,7 @@ function ItemCard({ item }: { item: Item }) {
   const outOfWindow = age !== null && age > 7
 
   return (
-    <div className="bg-white border border-border rounded-xl p-4 hover:border-border-strong transition">
+    <article id={`news-${item.id}`} className="scroll-mt-24 bg-white border border-border rounded-xl p-4 hover:border-border-strong transition">
       {/* Top row: category badge + region + date */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -588,6 +588,6 @@ function ItemCard({ item }: { item: Item }) {
         className="text-xs text-[#1a4d2e] hover:underline font-medium">
         Read on {item.source_name || 'source'} →
       </a>
-    </div>
+    </article>
   )
 }

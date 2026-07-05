@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import type { Metadata } from 'next'
 import { createSupabaseServerClient, getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
@@ -8,6 +9,11 @@ import CrmBoard from './CrmBoard'
 import type { Contact } from '@/lib/crm'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Fundraising CRM | RaiseSEA',
+  description: 'Track investor conversations, next actions, priorities, and fundraising pipeline stages inside RaiseSEA.',
+}
 
 export default async function CrmPage() {
   const user = await getSessionUser()

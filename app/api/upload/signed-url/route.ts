@@ -10,9 +10,8 @@
 //   3. Client PUTs the PDF bytes directly to that URL (browser → Supabase)
 //   4. Client then calls /api/submit with the storage path (small JSON body)
 //
-// Storage path convention (unchanged from previous implementation):
+// Storage path convention:
 //   pitch-decks/<user_id>/<slug>.pdf   (authenticated user)
-//   pitch-decks/anonymous/<slug>.pdf   (anonymous submission)
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -80,9 +79,16 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Generate storage path ─────────────────────────────────
-    // Use service role to read session — same pattern as /api/submit
+    // Require login here too. /apply is page-protected, but this API can be
+    // called directly and should not mint anonymous upload URLs in production.
     const sessionUser = await getSessionUser()
-    const userId = sessionUser?.id || null
+    if (!sessionUser) {
+      return NextResponse.json(
+        { error: 'Please sign in with Google before uploading a deck.', code: 'AUTH_REQUIRED' },
+        { status: 401 }
+      )
+    }
+    const userId = sessionUser.id
 
     if (sessionUser && !(await canBypassFreeLimits(sessionUser))) {
       const usageWindow = currentUsageWindow()
@@ -122,8 +128,8 @@ export async function POST(req: NextRequest) {
     // Generated here (not in /api/submit) so client can pass it through.
     const slug = randomBytes(8).toString('hex')
 
-    // Folder = user_id (for RLS "Users can read own decks") or 'anonymous'
-    const folder = userId && /^[a-zA-Z0-9-]+$/.test(userId) ? userId : 'anonymous'
+    // Folder = user_id (for RLS "Users can read own decks")
+    const folder = /^[a-zA-Z0-9-]+$/.test(userId) ? userId : 'authenticated'
     const storagePath = `${folder}/${slug}.pdf`
 
     // ── Generate signed upload URL ────────────────────────────
