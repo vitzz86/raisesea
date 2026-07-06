@@ -17,18 +17,18 @@ const aiTools = [
     href: (prompt: string) => `https://chatgpt.com/?q=${encodeURIComponent(prompt)}`,
   },
   {
-    key: 'gemini',
-    name: 'Gemini',
-    logo: '/ai/gemini-logo.png',
-    hint: 'Prompt copied first',
-    href: (_prompt: string) => 'https://gemini.google.com/app',
-  },
-  {
     key: 'claude',
     name: 'Claude',
     logo: '/ai/claude-logo.png',
     hint: 'Prompt opens and copies',
     href: (prompt: string) => `https://claude.ai/new?q=${encodeURIComponent(prompt)}`,
+  },
+  {
+    key: 'gemini',
+    name: 'Gemini',
+    logo: '/ai/gemini-logo.png',
+    hint: 'Copy first, then paste',
+    href: (_prompt: string) => 'https://gemini.google.com/app',
   },
 ] as const
 
@@ -135,7 +135,7 @@ export default function AINewsPromptPanel({ baseUrl, className = '' }: Props) {
           </div>
           <h2 className="text-base font-semibold text-text-primary">Ask ChatGPT, Gemini, or Claude to read RaiseSEA News</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-secondary">
-            The prompt is copied first, then your AI tool opens. Gemini may ask you to paste once the tab opens.
+            ChatGPT and Claude can open with the prompt. For Gemini, copy the prompt first, then paste it after Gemini opens.
           </p>
         </div>
         <button
