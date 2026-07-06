@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import type { CategorizedTopStories, TopStory as AITopStory, TopStoryCategory } from '@/lib/news-clustering'
+import AINewsPromptPanel from './AINewsPromptPanel'
 
 type Item = {
   id: string
@@ -64,6 +65,7 @@ type Props = {
   headingId?: string
   headingLevel?: 'h1' | 'h2'
   loginHref?: string
+  aiPromptBaseUrl?: string
 }
 
 const CATEGORIES = [
@@ -117,6 +119,7 @@ export default function NewsFeed({
   headingId,
   headingLevel = 'h1',
   loginHref = '/login?redirectTo=/news',
+  aiPromptBaseUrl,
 }: Props) {
   // Filters
   const [query, setQuery]       = useState<string>('')
@@ -213,7 +216,6 @@ export default function NewsFeed({
         <div>
           <Heading id={headingId} className="text-2xl font-semibold text-gray-900">Weekly SEA Fundraising Digest</Heading>
           <p className="text-sm text-gray-600 mt-1">{dateRange} · curated fundraising, tech, and policy news.</p>
-          <p className="text-xs text-brand mt-1">AI-ready digest for ChatGPT, Gemini, and Claude.</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {publicMode ? (
@@ -232,6 +234,8 @@ export default function NewsFeed({
           )}
         </div>
       </div>
+
+      {aiPromptBaseUrl && <AINewsPromptPanel baseUrl={aiPromptBaseUrl} />}
 
       {/* Editor's take — structured newsletter style */}
       {editorsTake && (editorsTake.headline || editorsTake.body) && (

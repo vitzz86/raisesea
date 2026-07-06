@@ -12,22 +12,22 @@ const aiTools = [
   {
     key: 'chatgpt',
     name: 'ChatGPT',
-    mark: 'G',
-    color: 'bg-[#10a37f] text-white',
+    logo: 'https://chatgpt.com/favicon.ico',
+    hint: 'Prompt opens and copies',
     href: (prompt: string) => `https://chatgpt.com/?q=${encodeURIComponent(prompt)}`,
   },
   {
     key: 'gemini',
     name: 'Gemini',
-    mark: 'Ge',
-    color: 'bg-[#1a73e8] text-white',
-    href: (prompt: string) => `https://gemini.google.com/app?prompt=${encodeURIComponent(prompt)}`,
+    logo: 'https://gemini.google.com/favicon.ico',
+    hint: 'Paste after opening',
+    href: (_prompt: string) => 'https://gemini.google.com/app',
   },
   {
     key: 'claude',
     name: 'Claude',
-    mark: 'Cl',
-    color: 'bg-[#cc785c] text-white',
+    logo: 'https://claude.ai/favicon.ico',
+    hint: 'Prompt opens and copies',
     href: (prompt: string) => `https://claude.ai/new?q=${encodeURIComponent(prompt)}`,
   },
 ] as const
@@ -121,8 +121,14 @@ export default function AINewsPromptPanel({ baseUrl, className = '' }: Props) {
   }
 
   async function openAI(href: string) {
-    void copyPrompt()
-    window.open(href, '_blank', 'noopener,noreferrer')
+    const target = window.open('', '_blank')
+    await copyPrompt()
+    if (target) {
+      target.opener = null
+      target.location.href = href
+    } else {
+      window.open(href, '_blank', 'noopener,noreferrer')
+    }
   }
 
   return (
@@ -135,7 +141,7 @@ export default function AINewsPromptPanel({ baseUrl, className = '' }: Props) {
           </div>
           <h2 className="text-base font-semibold text-text-primary">Ask ChatGPT, Gemini, or Claude to read RaiseSEA News</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-secondary">
-            The prompt starts with the AI-readable digest, then falls back to focused feeds for specific countries, sectors, investors, and topics.
+            The prompt is copied before opening your AI tool. For Gemini, paste it into the chat after the tab opens.
           </p>
         </div>
         <button
@@ -157,12 +163,12 @@ export default function AINewsPromptPanel({ baseUrl, className = '' }: Props) {
             className="flex items-center justify-between rounded-lg border border-border bg-white px-3 py-2.5 text-left transition hover:border-brand/40 hover:shadow-sm"
           >
             <span className="flex min-w-0 items-center gap-2">
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${tool.color}`}>
-                {tool.mark}
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-border">
+                <img src={tool.logo} alt="" className="h-5 w-5 object-contain" referrerPolicy="no-referrer" />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-text-primary">{tool.name}</span>
-                <span className="block text-[11px] text-text-tertiary">Prompt copied first</span>
+                <span className="block text-[11px] text-text-tertiary">{tool.hint}</span>
               </span>
             </span>
             <ExternalLink className="h-4 w-4 shrink-0 text-text-tertiary" strokeWidth={1.8} />
