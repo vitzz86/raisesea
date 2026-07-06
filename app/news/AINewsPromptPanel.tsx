@@ -120,16 +120,9 @@ export default function AINewsPromptPanel({ baseUrl, className = '' }: Props) {
     }
   }
 
-  async function openAI(href: string) {
-    const copyPromise = copyPrompt()
-    const target = window.open('', '_blank')
-    await copyPromise
-    if (target) {
-      target.opener = null
-      target.location.href = href
-    } else {
-      window.open(href, '_blank', 'noopener,noreferrer')
-    }
+  function openAI(href: string) {
+    void copyPrompt()
+    window.open(href, '_blank', 'noopener,noreferrer')
   }
 
   return (
