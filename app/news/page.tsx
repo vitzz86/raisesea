@@ -5,6 +5,7 @@ import { isSuperAdmin } from '@/lib/super-admin'
 import { isApprovedExpert } from '@/lib/expert-status'
 import DashboardShell from '@/components/DashboardShell'
 import { NewsSignupPrompt } from '@/components/landing/NewsSignupPrompt'
+import AINewsPromptPanel from './AINewsPromptPanel'
 import NewsFeed from './NewsFeed'
 import {
   NEWS_JSON_PATH,
@@ -96,6 +97,7 @@ export default async function NewsPage({
   const feed = (
     <>
       {machineLinks}
+      <AINewsPromptPanel baseUrl={baseUrl} />
       <NewsFeed
         items={digest.items}
         userSectors={profile?.news_sectors || []}

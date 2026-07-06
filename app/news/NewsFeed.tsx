@@ -213,6 +213,7 @@ export default function NewsFeed({
         <div>
           <Heading id={headingId} className="text-2xl font-semibold text-gray-900">Weekly SEA Fundraising Digest</Heading>
           <p className="text-sm text-gray-600 mt-1">{dateRange} · curated fundraising, tech, and policy news.</p>
+          <p className="text-xs text-brand mt-1">AI-ready digest for ChatGPT, Gemini, and Claude.</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {publicMode ? (
