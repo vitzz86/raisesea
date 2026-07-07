@@ -550,13 +550,9 @@ function buildCoInvestorNetwork(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Stage + sector normalization. The form sends UI-friendly strings
-// like 'Pre-Series A' (capital S) and 'SaaS / B2B' (spaces around /),
-// but the matching logic (STAGE_LEVEL), DB benchmarks (ROUND_BENCHMARKS,
-// VALUATION_BY_SECTOR, MARKET_SIZES), and helper functions all expect
-// canonical strings: 'Pre-series A', 'SaaS', 'Crypto/Web3'. Without
-// these maps the lookups silently return null/undefined and the user
-// gets a Seed-tier match for a Pre-Series A raise.
+// Stage + sector normalization. User-facing forms now send canonical sector
+// labels, but this keeps older saved/submitted values compatible with the
+// matching logic, DB benchmarks, and helper functions.
 // ─────────────────────────────────────────────────────────────
 function canonicalStage(s: string): string {
   if (!s) return ''
@@ -582,7 +578,7 @@ function canonicalStage(s: string): string {
 
 function canonicalSector(s: string): string {
   if (!s) return ''
-  // Strip spaces around slashes so 'SaaS / B2B' → 'SaaS/B2B' and 'Crypto / Web3' → 'Crypto/Web3'
+  // Strip spaces around slashes so legacy values still normalize cleanly.
   const cleaned = s.replace(/\s*\/\s*/g, '/').trim()
   const lower = cleaned.toLowerCase()
   const map: Record<string, string> = {
@@ -590,7 +586,7 @@ function canonicalSector(s: string): string {
     'ai':            'AI/ML',
     'fintech':       'Fintech',
     'saas':          'SaaS',
-    'saas/b2b':      'SaaS',          // form: 'SaaS / B2B' → canonical 'SaaS'
+    'saas/b2b':      'SaaS',
     'b2b saas':      'SaaS',
     'b2b':           'SaaS',
     'e-commerce':    'E-commerce',
@@ -607,7 +603,7 @@ function canonicalSector(s: string): string {
     'consumer':      'Consumer',
     'cybersecurity': 'Cybersecurity',
     'security':      'Cybersecurity',
-    'crypto/web3':   'Crypto/Web3',   // form: 'Crypto / Web3' → 'Crypto/Web3'
+    'crypto/web3':   'Crypto/Web3',
     'crypto':        'Crypto/Web3',
     'web3':          'Crypto/Web3',
     'blockchain':    'Crypto/Web3',

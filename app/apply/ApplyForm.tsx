@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 // SEA-only — RaiseSEA's investor database only contains funds active in SEA, so non-SEA
 // countries always returned 0 matches. Restrict the dropdown to the 11 SEA countries.
 const COUNTRIES = ['Indonesia','Malaysia','Singapore','Vietnam','Thailand','Philippines','Myanmar','Cambodia','Laos','Brunei','Timor-Leste']
-const SECTORS   = ['AI/ML','Fintech','SaaS / B2B','E-commerce','Healthtech','Logistics','Edtech','Agritech','Cleantech','Deep Tech','Consumer','Cybersecurity','Crypto / Web3','Other']
+const SECTORS   = ['AI/ML','Fintech','SaaS','E-commerce','Healthtech','Logistics','Edtech','Agritech','Cleantech','Deep Tech','Consumer','Cybersecurity','Crypto/Web3','Other']
 const STAGES    = ['Pre-seed','Seed','Pre-Series A','Series A','Series B']
 const BIZ_MODELS = ['B2B','B2C','B2B2C','Marketplace','SaaS','Project / Contract','D2C','Other']
 const FOUNDER_PROFILES = ['Technical founder','Domain expert','Serial entrepreneur','First-time founder','Business founder','Mixed team']

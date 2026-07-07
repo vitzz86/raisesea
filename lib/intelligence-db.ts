@@ -792,7 +792,7 @@ export function normalizeSector(sector: string): string {
   const map: Record<string, string> = {
     'ai': 'AI/ML', 'ai/ml': 'AI/ML', 'machine learning': 'AI/ML',
     'artificial intelligence': 'AI/ML', 'computer vision': 'AI/ML',
-    'saas': 'SaaS', 'b2b saas': 'SaaS', 'software': 'SaaS',
+    'saas': 'SaaS', 'saas/b2b': 'SaaS', 'b2b saas': 'SaaS', 'software': 'SaaS',
     'fintech': 'Fintech', 'financial technology': 'Fintech',
     'healthtech': 'Healthtech', 'health tech': 'Healthtech',
     'medtech': 'Healthtech', 'digital health': 'Healthtech',
@@ -806,7 +806,7 @@ export function normalizeSector(sector: string): string {
     'agritech': 'Agritech', 'agriculture': 'Agritech',
     'consumer': 'Consumer', 'consumer app': 'Consumer',
     'cybersecurity': 'Cybersecurity', 'security': 'Cybersecurity',
-    'crypto': 'Crypto/Web3', 'web3': 'Crypto/Web3', 'blockchain': 'Crypto/Web3',
+    'crypto': 'Crypto/Web3', 'crypto/web3': 'Crypto/Web3', 'web3': 'Crypto/Web3', 'blockchain': 'Crypto/Web3',
     'b2b': 'B2B', 'enterprise': 'B2B',
   }
   return map[sector.toLowerCase()] || sector
