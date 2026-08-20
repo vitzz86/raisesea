@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { buildUnsubscribeUrl } from '@/lib/unsubscribe'
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -62,7 +63,7 @@ ${reason ? `<div style="background:#f8f7f2;border-radius:8px;padding:14px;margin
       await sendEmail({
         to: founderUser.email,
         subject: `Meeting request response from ${vc?.display_name || 'expert'}`,
-        html: wrapEmailHTML({ title: 'Meeting request response', body: emailBody, unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?u=${founderUser.id}` }),
+        html: wrapEmailHTML({ title: 'Meeting request response', body: emailBody, unsubscribeUrl: buildUnsubscribeUrl(baseUrl, founderUser.id) }),
         text: `${vc?.display_name || 'The expert'} can't take this meeting. ${reason || ''}`,
         tags: [{ name: 'category', value: 'meeting_declined' }],
       })

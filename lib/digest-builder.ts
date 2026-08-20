@@ -17,6 +17,7 @@ import { supabaseAdmin } from './supabase'
 import { sendEmail, sendEmailBatch, wrapEmailHTML } from './resend'
 import { verifyTake } from './editorial-verify'
 import { TOP_STORY_CATEGORIES, type CategorizedTopStories } from './news-clustering'
+import { buildUnsubscribeUrl } from './unsubscribe'
 
 type NewsItem = {
   id: string
@@ -196,7 +197,7 @@ export async function sendWeeklyDigest(opts: {
         baseUrl,
       }),
       footer: `You're getting this because you signed up for RaiseSEA. ${sub.news_sectors.length > 0 ? 'Section 1 is personalized for your sectors: ' + sub.news_sectors.join(', ') + '.' : 'Pick sectors in your settings to personalize.'}`,
-      unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?u=${sub.id}`,
+      unsubscribeUrl: buildUnsubscribeUrl(baseUrl, sub.id),
     })
     const text = buildDigestText({ firstName: sub.full_name?.split(' ')[0] || null, section1, techItems, policyItems, exitItems, baseUrl })
     return { html, text, section1Count: section1.length }

@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createMeetingEvent } from '@/lib/google-calendar'
+import { buildUnsubscribeUrl } from '@/lib/unsubscribe'
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -158,7 +159,7 @@ ${event.meetLink ? `<a href="${event.meetLink}" style="display:inline-block;back
     await sendEmail({
       to: founderEmail,
       subject: `Meeting confirmed with ${vcProfile.display_name}`,
-      html: wrapEmailHTML({ title: 'Meeting confirmed', body: emailBody, unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?u=${mr.founder_user_id}` }),
+      html: wrapEmailHTML({ title: 'Meeting confirmed', body: emailBody, unsubscribeUrl: buildUnsubscribeUrl(baseUrl, mr.founder_user_id) }),
       text: `${vcProfile.display_name} confirmed your meeting on ${formattedTime}. ${event.meetLink || ''}`,
       tags: [{ name: 'category', value: 'meeting_confirmed' }],
     })

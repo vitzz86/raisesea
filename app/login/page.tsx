@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSessionUser } from '@/lib/supabase-server'
 import LoginForm from './LoginForm'
+import { safeInternalRedirect } from '@/lib/safe-redirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,16 +18,11 @@ export default async function LoginPage({
 }) {
   const user = await getSessionUser()
   const params = await searchParams
-  const redirectTo = safeRedirect(params.redirectTo || params.next || '/dashboard')
+  const redirectTo = safeInternalRedirect(params.redirectTo || params.next)
 
   if (user) {
     redirect(redirectTo)
   }
 
   return <LoginForm redirectTo={redirectTo} initialError={params.error} />
-}
-
-function safeRedirect(path: string): string {
-  if (!path.startsWith('/') || path.startsWith('//')) return '/dashboard'
-  return path
 }

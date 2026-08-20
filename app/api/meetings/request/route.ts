@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { getBusyBlocks } from '@/lib/google-calendar'
 import { computeFreeSlots, type AvailabilityWindow, type SoftHeldSlot } from '@/lib/slot-computation'
+import { buildUnsubscribeUrl } from '@/lib/unsubscribe'
 
 const VALID_GOALS = ['pitch_intro', 'investment_discussion', 'product_feedback', 'market_advice', 'intro_request', 'other']
 const MIN_LEAD_MS = 48 * 3600 * 1000  // 48 hours
@@ -173,7 +174,7 @@ export async function POST(req: Request) {
       await sendEmail({
         to: vcEmail,
         subject: `Meeting request from ${user.email}`,
-        html: wrapEmailHTML({ title: 'New meeting request', body: emailBody, unsubscribeUrl: `${baseUrl}/api/email/unsubscribe?u=${vc.user_id}` }),
+        html: wrapEmailHTML({ title: 'New meeting request', body: emailBody, unsubscribeUrl: buildUnsubscribeUrl(baseUrl, vc.user_id) }),
         text: `New meeting request from ${user.email}. Review: ${baseUrl}/experts/meetings`,
         tags: [{ name: 'category', value: 'meeting_request' }],
       })
