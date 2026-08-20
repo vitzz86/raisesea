@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/supabase-server'
+import { isSuperAdmin } from '@/lib/super-admin'
 
 export async function POST(req: NextRequest) {
-  const cookie = req.cookies.get('admin_auth')
-  if (cookie?.value !== process.env.ADMIN_PASSWORD) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isSuperAdmin(user))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id, is_public } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })

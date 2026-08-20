@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getSessionUser } from '@/lib/supabase-server'
+import { isSuperAdmin } from '@/lib/super-admin'
 
-export async function GET(req: NextRequest) {
-  const cookie = req.cookies.get('admin_auth')
-  if (cookie?.value !== process.env.ADMIN_PASSWORD) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+export async function GET(_req: NextRequest) {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isSuperAdmin(user))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data, error } = await supabaseAdmin
     .from('submissions')

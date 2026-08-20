@@ -61,9 +61,6 @@ export function TermTooltip({ term, children, className }: TermTooltipProps) {
 
   const entry = findTerm(term)
 
-  // Silent no-op: term not in glossary, render children plainly
-  if (!entry) return <>{children}</>
-
   function calcPosition() {
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
@@ -126,6 +123,10 @@ export function TermTooltip({ term, children, className }: TermTooltipProps) {
       if (closeTimer.current) clearTimeout(closeTimer.current)
     }
   }, [])
+
+  // Silent no-op: term not in glossary, render children plainly. This must be
+  // after every hook so hook order stays stable if glossary data changes.
+  if (!entry) return <>{children}</>
 
   const tooltipNode = (open && position && mounted)
     ? createPortal(

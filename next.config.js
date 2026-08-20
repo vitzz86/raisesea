@@ -1,18 +1,39 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // App Router — no api config needed here
-  // Increase payload limit via route segment config instead (see submit/route.ts)
+  poweredByHeader: false,
+  turbopack: { root: __dirname },
 
-  // Skip type checking during build. Types are still checked in dev mode
-  // and in editor (VS Code). This unblocks deployment when there's accumulated
-  // technical debt in implicit-any types we'll fix iteratively post-launch.
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  async headers() {
+    const scriptSrc = process.env.NODE_ENV === 'development'
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+      : "script-src 'self' 'unsafe-inline'"
+    const csp = [
+      "default-src 'self'",
+      scriptSrc,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      "media-src 'self' blob:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "upgrade-insecure-requests",
+    ].join('; ')
 
-  // Skip ESLint during build (same reason). lint runs on dev/CI separately.
-  eslint: {
-    ignoreDuringBuilds: true,
+    return [{
+      source: '/(.*)',
+      headers: [
+        { key: 'Content-Security-Policy', value: csp },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), microphone=(self), payment=(), usb=()' },
+      ],
+    }]
   },
 }
+
 module.exports = nextConfig
