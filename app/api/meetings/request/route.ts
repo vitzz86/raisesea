@@ -12,6 +12,7 @@ import { isSuperAdmin } from '@/lib/super-admin'
 import { getBusyBlocks } from '@/lib/google-calendar'
 import { computeFreeSlots, type AvailabilityWindow, type SoftHeldSlot } from '@/lib/slot-computation'
 import { buildUnsubscribeUrl } from '@/lib/unsubscribe'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 
 const VALID_GOALS = ['pitch_intro', 'investment_discussion', 'product_feedback', 'market_advice', 'intro_request', 'other']
 const MIN_LEAD_MS = 48 * 3600 * 1000  // 48 hours
@@ -22,6 +23,8 @@ export async function POST(req: Request) {
   if (!(await isSuperAdmin(user))) {
     return NextResponse.json({ error: 'This feature is currently available to admins only' }, { status: 403 })
   }
+  const rateLimitResponse = await enforceApiRateLimit(user.id, 'meeting_request', 10, 86400)
+  if (rateLimitResponse) return rateLimitResponse
 
   let body: {
     vc_profile_id?:   string

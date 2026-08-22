@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 30
 export const runtime = 'nodejs'
@@ -100,6 +101,8 @@ async function callGeminiVision(base64Image: string, mimeType: string): Promise<
 export async function POST(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rateLimitResponse = await enforceApiRateLimit(user.id, 'business_card_scan', 20, 3600)
+  if (rateLimitResponse) return rateLimitResponse
 
   let body: { imageBase64?: string; mimeType?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }

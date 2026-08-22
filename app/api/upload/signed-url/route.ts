@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { getSessionUser } from '@/lib/supabase-server'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 import {
   FREE_DECK_ANALYSIS_MONTHLY_LIMIT,
   canBypassFreeLimits,
@@ -89,6 +90,8 @@ export async function POST(req: NextRequest) {
       )
     }
     const userId = sessionUser.id
+    const rateLimitResponse = await enforceApiRateLimit(userId, 'deck_upload_url', 10, 600)
+    if (rateLimitResponse) return rateLimitResponse
 
     if (sessionUser && !(await canBypassFreeLimits(sessionUser))) {
       const usageWindow = currentUsageWindow()

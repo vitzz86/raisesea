@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { analyzeCompetitors } from '@/lib/gemini'
 import { getSessionUser } from '@/lib/supabase-server'
 import { isSuperAdmin } from '@/lib/super-admin'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!)
 export const maxDuration = 120
 export async function POST(req: NextRequest) {
@@ -10,6 +11,8 @@ export async function POST(req: NextRequest) {
     const user = await getSessionUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!(await isSuperAdmin(user))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const rateLimitResponse = await enforceApiRateLimit(user.id, 'admin_analyze_competitors', 20, 3600)
+    if (rateLimitResponse) return rateLimitResponse
 
     const { submission_id } = await req.json()
     if (typeof submission_id !== 'string' || !submission_id) {

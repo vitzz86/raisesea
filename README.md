@@ -1,32 +1,35 @@
-# RaiseSEA v2
+# RaiseSEA
 
-SEA founder-investor matchmaking + AI intelligence platform.
+Fundraising intelligence and execution workspace for Southeast Asian founders.
 
 ## Quick start
 
 ```bash
 cp .env.local.example .env.local
-# Fill in your keys (see .env.local.example)
-npm install
+# Fill in the required values without committing the file.
+npm ci
 npm run dev
 ```
 
 ## Setup order
 
-1. **Supabase**: Run `supabase/migrations/v2_schema.sql` in your Supabase SQL editor
-2. **Gemini API key**: Used for deck analysis → add to `.env.local`
-3. **DeepSeek API key**: Used for the news pipeline → add to `.env.local`
-4. **Google Drive**: Add OAuth credentials to `.env.local`
-5. **Run**: `npm install && npm run dev`
+1. Create a Supabase project and configure Google authentication.
+2. Apply every file in `supabase/migrations/` in version order.
+3. Create the private `pitch-decks` Storage bucket.
+4. Copy `.env.local.example` to `.env.local` and provide the required keys.
+5. Run `npm ci && npm run check && npm run build` before starting development.
+
+Never expose `SUPABASE_SERVICE_KEY`, OAuth tokens, or provider API keys to
+browser code. Only variables prefixed with `NEXT_PUBLIC_` may be public.
 
 ## Stack
 
-- Next.js 15 (App Router) + TypeScript + Tailwind CSS
-- Supabase (Postgres + Auth)
-- Gemini 2.5 Flash (deck AI)
-- DeepSeek v4 Flash/Pro (news AI)
-- Google Drive (deck storage)
-- Render.com (deployment)
+- Next.js 16 App Router, React 19, TypeScript and Tailwind CSS
+- Supabase Postgres, Auth and private Storage
+- Gemini for deck analysis, business-card extraction and mock pitch
+- DeepSeek for the news pipeline
+- Google Calendar OAuth for opted-in meeting scheduling
+- Vercel for previews, production and scheduled news ingestion
 
 ## Key files
 
@@ -38,12 +41,38 @@ npm run dev
 | `app/api/submit/route.ts` | Main submission handler |
 | `app/match/[id]/page.tsx` | 6-tab results dashboard |
 | `components/results/` | Tab components — Overview, Deck, Market, Competitors, Investors, Meet |
-| `supabase/migrations/v2_schema.sql` | Database schema |
+| `lib/supabase-server.ts` | Authenticated server-side Supabase access |
+| `lib/rate-limit.ts` | Database-backed protection for expensive routes |
+| `supabase/migrations/` | Ordered database migrations |
+| `.github/workflows/ci.yml` | Required code, build and dependency checks |
 
-## Phase roadmap
+## Quality commands
 
-- ✅ Phase 1: Gemini migration + schema
-- ✅ Phase 2: Deck intelligence (8 dimensions, adaptive spider chart)
-- ✅ Phase 3: Market analysis + football field valuation + competitive analysis
-- 🔲 Phase 4: Meeting scheduler (/meet page, investor/expert profiles)
-- 🔲 Phase 5: Monetization (Stripe — Starter $9, Pro $29, Featured $49/mo)
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run check
+npm run build
+npm audit --audit-level=high
+```
+
+## Product priorities
+
+1. Make the journey from deck upload to a real fundraising action reliable.
+2. Measure analysis completion, second actions and 30-day retained use.
+3. Pilot meetings with a small, explicitly opted-in expert network.
+4. Add verified funding opportunities only after the core journey is measured.
+5. Test monetization after repeated founder or institutional value is proven.
+
+The current north-star outcome is an active fundraising journey: a founder
+completes a deck analysis and at least one meaningful preparation or execution
+action within 30 days.
+
+## Migration and deployment order
+
+- A migration that is backward-compatible may be applied before its code deploy.
+- A migration that removes an old access path must be coordinated with its code
+  deployment in the same maintenance window.
+- Pull requests must document the exact migration order and pass CI plus Vercel
+  preview checks before merge.

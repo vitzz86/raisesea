@@ -79,8 +79,8 @@ export default function RequestMeetingForm({ vc, founder, submissions }: Props) 
           const fetchedSlots = (data.slots || []) as Slot[]
           setSlots(fetchedSlots)
           // Auto-select first day with availability
-          if (fetchedSlots.length > 0 && !selectedDate) {
-            setSelectedDate(fetchedSlots[0].iso_date)
+          if (fetchedSlots.length > 0) {
+            setSelectedDate(current => current ?? fetchedSlots[0].iso_date)
           }
         }
       } catch {

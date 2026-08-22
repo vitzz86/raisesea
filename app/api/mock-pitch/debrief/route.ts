@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 import type { Debrief, DimensionScore, PitchTurn, QATurn, Question, ContentDimension, QuestionBreakdown, SuggestedQuestion, PriorityFix } from '@/lib/mock-pitch'
 import { distillDeckAnalysis, businessProfileHeader, MONEY_FORMAT_INSTRUCTION } from '@/lib/mock-pitch-context'
 
@@ -15,6 +16,8 @@ const MAX_TOKENS_SUGGESTED = 4096
 export async function POST(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rateLimitResponse = await enforceApiRateLimit(user.id, 'mock_pitch_debrief', 10, 3600)
+  if (rateLimitResponse) return rateLimitResponse
 
   let body: { sessionId?: string }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }

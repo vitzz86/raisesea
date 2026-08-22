@@ -6,6 +6,7 @@ import { deleteDeck, downloadDeck } from '@/lib/storage'
 import { runFullAnalysis } from '@/lib/gemini'
 import { runMatching, normalizeCountry } from '@/lib/matching'
 import { getSessionUser } from '@/lib/supabase-server'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 import type { Investor } from '@/lib/supabase'
 import {
   FREE_DECK_ANALYSIS_MONTHLY_LIMIT,
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
         { status: 401 }
       )
     }
+    const rateLimitResponse = await enforceApiRateLimit(sessionUser.id, 'deck_analysis', 6, 3600)
+    if (rateLimitResponse) return rateLimitResponse
 
     // ── 1. Parse JSON body ──────────────────────────────────
     // (Previously this was FormData with the PDF file. The PDF is now

@@ -30,3 +30,47 @@ test('database hardening migration revokes anonymous privileged RPC access', asy
   }
   assert.match(sql, /DROP POLICY IF EXISTS "Public can view if is_public"/)
 })
+
+test('database rate limiting is atomic and service-role only', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/v24_api_rate_limits.sql', import.meta.url), 'utf8')
+  assert.match(sql, /ON CONFLICT \(principal_id, action, window_started_at\)/)
+  assert.match(sql, /request_count = public\.api_rate_limits\.request_count \+ 1/)
+  assert.match(sql, /SECURITY DEFINER/)
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.consume_api_rate_limit[\s\S]*FROM PUBLIC, anon, authenticated/)
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.consume_api_rate_limit[\s\S]*TO service_role/)
+})
+
+test('resource-intensive routes enforce the shared database limiter', async () => {
+  const routes = [
+    '../app/api/submit/route.ts',
+    '../app/api/upload/signed-url/route.ts',
+    '../app/api/crm/scan-card/route.ts',
+    '../app/api/mock-pitch/start/route.ts',
+    '../app/api/mock-pitch/debrief/route.ts',
+    '../app/api/analyze/deck/route.ts',
+    '../app/api/analyze/market/route.ts',
+    '../app/api/analyze/competitors/route.ts',
+    '../app/api/meetings/request/route.ts',
+  ]
+
+  for (const route of routes) {
+    const source = await readFile(new URL(route, import.meta.url), 'utf8')
+    assert.match(source, /enforceApiRateLimit\(/, `${route} must enforce a database rate limit`)
+  }
+})
+
+test('rate limiting only fails open while the v24 RPC is not installed', async () => {
+  const source = await readFile(new URL('../lib/rate-limit.ts', import.meta.url), 'utf8')
+  assert.match(source, /error\.code === 'PGRST202'/)
+  assert.match(source, /error\.code === '42883'/)
+  assert.match(source, /Every other database failure remains fail-closed/)
+  assert.match(source, /RATE_LIMIT_UNAVAILABLE/)
+})
+
+test('CI enforces checks, a production build, and a dependency audit', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /npm ci/)
+  assert.match(workflow, /npm run check/)
+  assert.match(workflow, /npm run build/)
+  assert.match(workflow, /npm audit --audit-level=high/)
+})

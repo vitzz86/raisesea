@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 import { questionCountForDuration, type Mode, type Question, PITCH_DURATIONS, QA_DURATIONS } from '@/lib/mock-pitch'
 import { distillDeckAnalysis, businessProfileHeader, MONEY_FORMAT_INSTRUCTION } from '@/lib/mock-pitch-context'
 import {
@@ -22,6 +23,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 export async function POST(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rateLimitResponse = await enforceApiRateLimit(user.id, 'mock_pitch_start', 6, 3600)
+  if (rateLimitResponse) return rateLimitResponse
 
   let body: { submissionId?: string; mode?: Mode; durationMin?: number }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
