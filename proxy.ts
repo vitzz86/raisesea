@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// middleware.ts — Route protection + session refresh
+// proxy.ts — Route protection + session refresh
 // ═══════════════════════════════════════════════════════════════
 // Runs on every matched request before page render. Two jobs:
 //   1. Refresh the user's session cookie (Supabase Auth SSR pattern)
@@ -38,7 +38,7 @@ const PROTECTED_PREFIXES = [
 // Legacy admin cookie route — kept for backward compat until chunk 5 retires it.
 const LEGACY_ADMIN_LOGIN = '/admin/login'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Legacy admin-login cookie check (kept for backward compat).

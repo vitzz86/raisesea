@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { analyzeMarket } from '@/lib/gemini'
+import { getSessionUser } from '@/lib/supabase-server'
+import { isSuperAdmin } from '@/lib/super-admin'
+import { enforceApiRateLimit } from '@/lib/rate-limit'
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!)
 export const maxDuration = 120
 export async function POST(req: NextRequest) {
   try {
+    const user = await getSessionUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await isSuperAdmin(user))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const rateLimitResponse = await enforceApiRateLimit(user.id, 'admin_analyze_market', 20, 3600)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { submission_id } = await req.json()
+    if (typeof submission_id !== 'string' || !submission_id) {
+      return NextResponse.json({ error: 'Missing submission_id' }, { status: 400 })
+    }
     const { data: sub } = await supabase.from('submissions').select('*').eq('id', submission_id).single()
     if (!sub) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const extraction = typeof sub.sector_profile === 'string' ? JSON.parse(sub.sector_profile) : sub.sector_profile

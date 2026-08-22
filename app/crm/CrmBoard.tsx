@@ -118,25 +118,28 @@ export default function CrmBoard({ initialContacts, initialCustomTypes }: { init
     await updateContact(id, { stage: stageKey })
   }
 
-  // Excel export — both boards as two sheets, respecting each board's filters
-  async function exportExcel() {
-    const XLSX = await import('xlsx')
-    const wb = XLSX.utils.book_new()
-
+  // CSV export avoids shipping the vulnerable legacy SheetJS browser bundle.
+  // Both boards remain in one portable file and include the active filters.
+  function exportCsv() {
+    const exported: Record<string, string | number>[] = []
     for (const b of ['investor', 'general'] as Board[]) {
       const f = b === 'investor' ? filterP : filterG
-      const rows = applyFilters(contacts.filter(c => c.board === b), f, customTypes)
-      const sheet = rowsToSheet(XLSX, rows, customTypes)
-      // Transparency footer at the bottom of the sheet
-      const totalForBoard = contacts.filter(c => c.board === b).length
-      const filtersDesc = describeFilters(f)
-      XLSX.utils.sheet_add_aoa(sheet, [
-        [],
-        [`Filters applied: ${filtersDesc} · ${rows.length} of ${totalForBoard} ${b === 'investor' ? 'investor' : 'general'} contacts shown`],
-      ], { origin: -1 })
-      XLSX.utils.book_append_sheet(wb, sheet, b === 'investor' ? 'Investors' : 'General')
+      const boardContacts = contacts.filter(c => c.board === b)
+      const rows = applyFilters(boardContacts, f, customTypes)
+      const filterSummary = `${describeFilters(f)} · ${rows.length} of ${boardContacts.length} shown`
+      exported.push(...rows.map(c => contactExportRow(c, customTypes, b, filterSummary)))
     }
-    XLSX.writeFile(wb, `raisesea-crm-${new Date().toISOString().slice(0, 10)}.xlsx`)
+
+    const headers = CSV_HEADERS
+    const lines = [headers, ...exported.map(row => headers.map(h => row[h] ?? ''))]
+    const csv = lines.map(row => row.map(csvCell).join(',')).join('\r\n')
+    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `raisesea-crm-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const anyFilterActive = ['priority', 'type', 'source', 'stage', 'action'].some(k => (filters as Record<string, string | boolean>)[k] !== 'all') || filters.search.length > 0 || filters.showLost
@@ -164,9 +167,9 @@ export default function CrmBoard({ initialContacts, initialCustomTypes }: { init
             className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
             + Add contact
           </button>
-          <button onClick={exportExcel}
+          <button onClick={exportCsv}
             className="text-xs font-medium border border-border-strong rounded-md px-3 py-1.5 hover:border-text-tertiary transition whitespace-nowrap">
-            📥 Export Excel
+            📥 Export CSV
           </button>
         </div>
       </div>
@@ -511,7 +514,13 @@ function Th({ col, sort, onClick, arrow, children }: {
   )
 }
 
-// ─── Helpers for Excel ─────────────────────────────────────────────
+// ─── Helpers for CSV export ────────────────────────────────────────
+
+const CSV_HEADERS = [
+  'Board', 'Name', 'Title', 'Company', 'Contact type', 'Stage', 'Priority', 'Status',
+  'Email', 'Phone', 'LinkedIn', 'Met at', 'Met where', 'Next action', 'Next action date',
+  'Notes', 'Date added', 'Last updated', 'Export filters',
+]
 function applyFilters(contacts: Contact[], f: ReturnType<typeof emptyFilters>, _customTypes: CustomTypes): Contact[] {
   const today = new Date().toISOString().slice(0, 10)
   const weekFromNow = new Date(Date.now() + 7 * 86400 * 1000).toISOString().slice(0, 10)
@@ -537,9 +546,9 @@ function applyFilters(contacts: Contact[], f: ReturnType<typeof emptyFilters>, _
   })
 }
 
-function rowsToSheet(XLSX: typeof import('xlsx'), rows: Contact[], customTypes: CustomTypes) {
-  type Row = Record<string, string | number>
-  const data: Row[] = rows.map(c => ({
+function contactExportRow(c: Contact, customTypes: CustomTypes, board: Board, filters: string) {
+  return {
+    Board: board === 'investor' ? 'Investors' : 'General',
     Name: c.name,
     Title: c.title || '',
     Company: c.company || '',
@@ -557,14 +566,15 @@ function rowsToSheet(XLSX: typeof import('xlsx'), rows: Contact[], customTypes: 
     Notes: c.notes || '',
     'Date added': new Date(c.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
     'Last updated': new Date(c.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
-  }))
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [
-    { wch: 24 }, { wch: 22 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 8 },
-    { wch: 26 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 22 }, { wch: 16 },
-    { wch: 50 }, { wch: 14 }, { wch: 14 },
-  ]
-  return ws
+    'Export filters': filters,
+  }
+}
+
+function csvCell(value: string | number): string {
+  let text = String(value ?? '')
+  // Prevent spreadsheet formula execution when a CSV is opened in Excel/Sheets.
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  return `"${text.replace(/"/g, '""')}"`
 }
 
 function describeFilters(f: ReturnType<typeof emptyFilters>): string {

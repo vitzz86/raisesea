@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getSessionUser } from '@/lib/supabase-server'
+import { isSuperAdmin } from '@/lib/super-admin'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +34,13 @@ export async function GET(req: NextRequest) {
   const { data: sub, error } = await supabaseAdmin
     .from('submissions').select('*').eq('unique_slug', slug).single()
   if (error || !sub) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const user = await getSessionUser()
+  const isOwner = !!(user && sub.user_id === user.id)
+  const isAdmin = user ? await isSuperAdmin(user) : false
+  if (sub.is_public !== true && !isOwner && !isAdmin) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const matches = safeJSON<Array<Record<string, unknown>>>(sub.match_results) || []
   const network = safeJSON<Array<Record<string, unknown>>>(sub.warm_intros)  || []

@@ -11,13 +11,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase'
+import { safeInternalRedirect } from '@/lib/safe-redirect'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const code = url.searchParams.get('code')
   const errorParam = url.searchParams.get('error')
   const errorDescription = url.searchParams.get('error_description')
-  const redirectTo = safeRedirect(url.searchParams.get('redirectTo') || '/dashboard')
+  const redirectTo = safeInternalRedirect(url.searchParams.get('redirectTo'))
 
   // If OAuth provider returned an error (e.g. user cancelled), bounce back to login
   if (errorParam) {
@@ -108,9 +109,4 @@ export async function GET(req: NextRequest) {
 
   // Final redirect — to /dashboard by default, or wherever they tried to go
   return NextResponse.redirect(new URL(redirectTo, url.origin))
-}
-
-function safeRedirect(path: string): string {
-  if (!path.startsWith('/') || path.startsWith('//')) return '/dashboard'
-  return path
 }
