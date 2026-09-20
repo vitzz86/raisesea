@@ -1,13 +1,22 @@
 #!/usr/bin/env tsx
 
-import { supabaseAdmin } from '../lib/supabase'
-import { autoGenerateTakeIfMissing } from '../lib/editorial-autofill'
-import { sendWeeklyDigest } from '../lib/digest-builder'
-import { auditNewsSources, runNewsPipeline } from '../lib/news-pipeline'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 type Mode = 'daily' | 'weekly' | 'dry-run' | 'source-audit'
 
 const VALID_MODES = new Set<Mode>(['daily', 'weekly', 'dry-run', 'source-audit'])
+
+function loadRuntimeEnvironment() {
+  const candidates = [
+    process.env.NEWS_ENV_FILE,
+    '/opt/data/.env',
+    resolve(process.cwd(), '.env.local'),
+    resolve(process.cwd(), '.env'),
+  ].filter((candidate): candidate is string => Boolean(candidate))
+  const envFile = candidates.find(existsSync)
+  if (envFile) process.loadEnvFile(envFile)
+}
 
 function readMode(): Mode {
   const raw = process.argv.find(arg => arg.startsWith('--mode='))?.split('=')[1] || 'daily'
@@ -39,6 +48,18 @@ function requiredEnvironment(mode: Mode): string[] {
 }
 
 async function main() {
+  loadRuntimeEnvironment()
+  const [
+    { supabaseAdmin },
+    { autoGenerateTakeIfMissing },
+    { sendWeeklyDigest },
+    { auditNewsSources, runNewsPipeline },
+  ] = await Promise.all([
+    import('../lib/supabase'),
+    import('../lib/editorial-autofill'),
+    import('../lib/digest-builder'),
+    import('../lib/news-pipeline'),
+  ])
   const mode = readMode()
   const now = new Date()
   const force = process.argv.includes('--force')
