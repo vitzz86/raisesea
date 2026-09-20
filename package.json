@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:cleanup": "tsx scripts/cleanup-db.ts"
+    "db:cleanup": "tsx scripts/cleanup-db.ts",
+    "news:hermes": "tsx scripts/hermes-news-runner.ts",
+    "test:news-hermes": "node --import tsx --test tests/news-sources.test.ts tests/news-quality.test.ts",
+    "typecheck:news-hermes": "tsc -p tsconfig.hermes.json"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
