@@ -13,7 +13,7 @@ Run from the deployed RaiseSEA directory:
 
 - Daily ingestion: `npm run news:hermes -- --mode=daily`
 - Monday ingestion + editorial + digest: `npm run news:hermes -- --mode=weekly`
-- Read-only live validation: `npm run news:hermes -- --mode=dry-run --force`
+- No-content-write live validation: `npm run news:hermes -- --mode=dry-run --force`
 - Source-only health audit: `npm run news:hermes -- --mode=source-audit`
 
 ## Operating rules

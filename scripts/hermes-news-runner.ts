@@ -25,7 +25,11 @@ function mondayKey(now: Date): string {
 }
 
 function requiredEnvironment(mode: Mode): string[] {
-  const common = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_KEY']
+  const common = [
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_KEY',
+  ]
   if (mode === 'source-audit') return []
   const modelKeyPresent = process.env.NEWS_AI_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY
   const missing = common.filter(name => !process.env[name])
