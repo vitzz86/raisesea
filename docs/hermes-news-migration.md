@@ -39,7 +39,7 @@ The production jobs are named `RaiseSEA Daily News Intelligence` and `RaiseSEA W
 
 ## Telegram operations
 
-Run `hermes/install-news-skills.sh` on the Hermes host, merge `hermes/telegram-command-menu.yaml.example` into the Hermes config, and restart the gateway once. The RaiseSEA bot then exposes `/news_daily`, `/news_status`, `/news_latest`, `/news_weekly`, `/news_search`, `/news_coverage`, `/news_sources`, `/news_edit`, and `/news_delist`.
+Run `hermes/install-news-skills.sh` on the Hermes host, merge `hermes/telegram-command-menu.yaml.example` into the Hermes config, and restart the gateway once. The RaiseSEA bot then exposes `/news_run_daily`, `/news_status`, `/news_latest`, `/news_weekly`, `/news_retry_weekly`, `/news_search`, `/news_coverage`, `/news_sources`, `/news_edit`, and `/news_delist`.
 
 Read-only commands run immediately. Editing, delisting and restoring require the exact item UUID plus explicit operator confirmation. Delisting is a reversible status change, not permanent deletion.
 

@@ -9,10 +9,11 @@ platforms:
         priority_mode: prepend
         priority:
           - news_help
-          - news_daily
+          - news_run_daily
           - news_status
           - news_latest
           - news_weekly
+          - news_retry_weekly
           - news_search
           - news_coverage
           - news_sources
