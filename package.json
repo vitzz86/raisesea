@@ -11,7 +11,8 @@
     "news:hermes": "tsx scripts/hermes-news-runner.ts",
     "news:control": "tsx scripts/hermes-news-control.ts",
     "test:news-hermes": "node --import tsx --test tests/news-sources.test.ts tests/news-quality.test.ts",
-    "typecheck:news-hermes": "tsc -p tsconfig.hermes.json"
+    "typecheck:news-hermes": "tsc -p tsconfig.hermes.json",
+    "test:hermes-team": "node scripts/validate-hermes-team.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
