@@ -1,8 +1,9 @@
 ---
 owner: Vito
 status: active
-last_verified: 2026-09-21
+last_verified: 2026-09-22
 sources:
+  - OpenRouter model catalog and pricing (2026-09-22)
   - project working sessions
 agents:
   - raisesea-software-engineer
@@ -11,7 +12,7 @@ agents:
 
 # Model routing policy
 
-Route by risk, not by novelty.
+Route by risk, not by novelty. All profiles route through OpenRouter except the Software Engineer, whose primary is Codex direct.
 
 | Work | Primary | Fallback | Never |
 |---|---|---|---|
@@ -19,6 +20,22 @@ Route by risk, not by novelty.
 | News extraction and synthesis | DeepSeek | approved OpenRouter reasoning model | unverified free model for publishing decisions |
 | Social drafts and rewrites | DeepSeek or approved value model | OpenRouter value model | automatic posting without review |
 | Idea capture, classification, reminders, formatting | approved cheap/free OpenRouter model such as Nemotron | DeepSeek | access to deploy or destructive tools |
+
+## Model fallback chains (final)
+
+Ordered primary -> fallback -> last resort.
+
+| Profile | Chain |
+|---|---|
+| News Intelligence | `deepseek/deepseek-v4.1-flash` -> `z-ai/glm-5.3-flash` -> `qwen/qwen3.8-flash` -> `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| Chief of Staff | `nvidia/nemotron-3-ultra-550b-a55b:free` -> `qwen/qwen3.8-27b:free` -> `deepseek/deepseek-v4.1-flash` |
+| Social Media Manager | `deepseek/deepseek-v4-pro` -> `z-ai/glm-5.3` -> `qwen/qwen3.8-flash` -> `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| Software Engineer | `gpt-5.6-sol` (Codex direct) -> `z-ai/glm-5.3` (OpenRouter) -> `deepseek/deepseek-v4-pro` (OpenRouter) |
+
+### Rules
+
+- All routing goes through OpenRouter except the Engineer, whose primary is Codex direct (`gpt-5.6-sol`); OpenRouter is fallback only.
+- Free models (`:free`) are allowed only as fallbacks for News, Chief of Staff, and Social. Never use a free model for the Engineer/coding.
 
 ## Safeguards
 
@@ -42,6 +59,6 @@ Operational rules:
 
 ## OpenRouter key cap
 
-Use a dedicated OpenRouter key named "Hermes" with a monthly spend limit set in the OpenRouter dashboard. That account-level cap is the last line of defense if the gateway misbehaves. Record the limit in `hermes/cost-control.env.example` and review it whenever the model routing changes.
+Use a dedicated OpenRouter key per profile with its own spend limit set in the OpenRouter dashboard. That account-level cap is the last line of defense if the gateway misbehaves. Record the limit in `hermes/cost-control.env.example` and review it whenever the model routing changes.
 
 Compare models on RaiseSEA-specific benchmark tasks before changing defaults.
