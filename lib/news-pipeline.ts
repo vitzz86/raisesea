@@ -147,6 +147,9 @@ async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { 
           temperature: 0.3,
           max_tokens: opts?.maxTokens || 8192,
           stream: false,
+          // News extraction is narrow structured work. Disabling thinking keeps
+          // latency and output token spend predictable.
+          thinking: { type: 'disabled' },
           ...(opts?.json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS),
