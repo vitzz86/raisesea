@@ -1,6 +1,6 @@
 ---
 name: news_weekly
-description: Show RaiseSEA's current editor's take and category top stories.
+description: Show RaiseSEA's current editor's take and top stories.
 ---
 
 # Weekly News Brief

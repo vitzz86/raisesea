@@ -1,6 +1,6 @@
 ---
 name: news_retry_weekly
-description: Regenerate the current RaiseSEA weekly brief and top stories without sending another email digest.
+description: Regenerate the current weekly brief without sending email.
 ---
 
 # Retry Current Weekly Brief

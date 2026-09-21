@@ -1,6 +1,6 @@
 ---
 name: news_coverage
-description: Show RaiseSEA's seven-day geographic and category coverage balance.
+description: Show RaiseSEA's seven-day geographic and category balance.
 ---
 
 # News Coverage
