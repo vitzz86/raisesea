@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // GET /api/cron/news
-// Called by Vercel Cron Jobs (configured in vercel.json).
+// Manual rollback/fallback endpoint. Hermes owns the production schedule;
+// vercel.json intentionally does not register this route as a cron job.
 // Auth via CRON_SECRET header check.
 //
 // On every run: fetches RSS + extracts via DeepSeek (idempotent — dedupes by URL)

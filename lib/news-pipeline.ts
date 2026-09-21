@@ -1,14 +1,15 @@
 // ═══════════════════════════════════════════════════════════════
 // lib/news-pipeline.ts
-// RSS → DeepSeek → news_items pipeline.
+// RSS → Hermes-compatible model API → news_items pipeline.
 //
 // Sources for MVP: Tech in Asia, e27, TechCrunch Asia.
-// We fetch RSS, deduplicate by source_url, then ask DeepSeek to extract:
+// We fetch RSS, deduplicate by source_url/title, then ask the configured model to extract:
 //   - category (fundraising | tech | policy | exit)
 //   - company name + amount + sector (if fundraising)
 //   - 1-line summary
 //   - 1-2 sentence "why it matters" with opinionated framing
-// Items land with status='pending' for super admin review.
+// High-confidence items publish automatically. Ambiguous records enter a
+// non-blocking review queue; weak records are skipped.
 // ═══════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from './supabase'
@@ -20,10 +21,30 @@ import {
   type CategorizedTopStories,
   type TopStoryCategory,
 } from './news-clustering'
+import {
+  NEWS_SOURCES,
+  selectBalancedCandidates,
+  type NewsMarket,
+  type NewsScope,
+  type NewsSource,
+} from './news-sources'
+import { decidePublication } from './news-quality'
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
-const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/chat/completions'
-const DEEPSEEK_MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro'] as const
+const NEWS_AI_API_KEY = process.env.NEWS_AI_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || ''
+const NEWS_AI_API_URL = resolveCompletionsUrl(
+  process.env.NEWS_AI_API_URL || process.env.OPENAI_BASE_URL || process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/chat/completions',
+)
+const configuredModels = (process.env.NEWS_AI_MODELS || process.env.NEWS_AI_MODEL || 'deepseek-v4-flash,deepseek-v4-pro')
+  .split(',')
+  .map(model => model.trim())
+  .filter(Boolean)
+const NEWS_AI_MODELS = configuredModels.length > 0 ? configuredModels : ['deepseek-v4-flash']
+
+function resolveCompletionsUrl(input: string): string {
+  const base = input.replace(/\/$/, '')
+  if (base.endsWith('/chat/completions')) return base
+  return `${base}/chat/completions`
+}
 
 // ── Per-call budget (tightened so no single item can hog the run) ──
 const PER_ATTEMPT_TIMEOUT_MS = 12_000   // hard kill a slow DeepSeek call at 12s
@@ -34,19 +55,19 @@ const BACKOFF_BASE_MS        = 1_000    // 1s before the single retry
 // Flash is the default. If it's overloaded (429/503) enough times in ONE run,
 // we flip to pro-only for the REST of that run instead of paying a doomed flash
 // attempt on every remaining item. Pro is ALWAYS retained as the fallback.
-const FLASH_BREAKER_THRESHOLD = 5
+const PRIMARY_MODEL_BREAKER_THRESHOLD = 5
 
 /**
  * Per-run mutable state shared across concurrent workers.
  * Single-threaded JS → plain counter mutation is safe (no locks needed).
  */
 type RunState = {
-  flashDisabled:  boolean   // true once the breaker trips → skip flash, go straight to pro
-  flashOverloads: number    // count of flash 429/503 this run
+  primaryDisabled:  boolean
+  primaryOverloads: number
 }
 
 function makeRunState(): RunState {
-  return { flashDisabled: false, flashOverloads: 0 }
+  return { primaryDisabled: false, primaryOverloads: 0 }
 }
 
 /** HTTP error carrying the status code so callers can detect overload (429/503). */
@@ -63,9 +84,9 @@ function isOverloadError(err: unknown): boolean {
 }
 
 /**
- * Call DeepSeek via its OpenAI-compatible REST API (no SDK dependency).
- * Model order: flash → pro. If `state.flashDisabled` is set (breaker tripped),
- * we start at pro and skip flash entirely. Pro is never dropped — it's the backup.
+ * Call the Hermes/SumoPod OpenAI-compatible REST API (no SDK dependency).
+ * Models are tried in NEWS_AI_MODELS order. A per-run circuit breaker skips a
+ * repeatedly overloaded primary while retaining every configured fallback.
  * Throws only if every available model+retry is exhausted.
  */
 async function callDeepSeekText(
@@ -74,44 +95,43 @@ async function callDeepSeekText(
   state?: RunState,
 ): Promise<string> {
   // Skip flash only when the breaker has tripped this run; pro is always tried.
-  const startIndex = state?.flashDisabled ? 1 : 0
+  const startIndex = state?.primaryDisabled && NEWS_AI_MODELS.length > 1 ? 1 : 0
   let lastErr: unknown = null
 
-  for (let mi = startIndex; mi < DEEPSEEK_MODELS.length; mi++) {
-    const model = DEEPSEEK_MODELS[mi]
+  for (let mi = startIndex; mi < NEWS_AI_MODELS.length; mi++) {
+    const model = NEWS_AI_MODELS[mi]
     try {
       return await callDeepSeekModelAttempt(model, prompt, opts)
     } catch (err) {
       lastErr = err
 
-      // Flash overloaded? Count it; trip the breaker so the rest of the run goes pro-only.
-      if (model === 'deepseek-v4-flash' && state && isOverloadError(err)) {
-        state.flashOverloads++
-        if (!state.flashDisabled && state.flashOverloads >= FLASH_BREAKER_THRESHOLD) {
-          state.flashDisabled = true
-          console.warn(`[news-pipeline] flash circuit breaker TRIPPED after ${state.flashOverloads} overloads — routing remaining items straight to ${DEEPSEEK_MODELS[1]}`)
+      if (mi === 0 && state && isOverloadError(err)) {
+        state.primaryOverloads++
+        if (!state.primaryDisabled && NEWS_AI_MODELS.length > 1 && state.primaryOverloads >= PRIMARY_MODEL_BREAKER_THRESHOLD) {
+          state.primaryDisabled = true
+          console.warn(`[news-pipeline] primary model circuit breaker tripped after ${state.primaryOverloads} overloads — routing remaining items to ${NEWS_AI_MODELS[1]}`)
         }
       }
 
-      const isLastModel = mi === DEEPSEEK_MODELS.length - 1
+      const isLastModel = mi === NEWS_AI_MODELS.length - 1
       if (isLastModel) throw err
-      console.warn(`[news-pipeline] ${model} exhausted retries, falling through to ${DEEPSEEK_MODELS[mi + 1]}`)
+      console.warn(`[news-pipeline] ${model} exhausted retries, falling through to ${NEWS_AI_MODELS[mi + 1]}`)
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('All DeepSeek models exhausted')
 }
 
 async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { json?: boolean; maxTokens?: number }): Promise<string> {
-  if (!DEEPSEEK_API_KEY) throw new Error('DEEPSEEK_API_KEY not configured')
+  if (!NEWS_AI_API_KEY) throw new Error('NEWS_AI_API_KEY (or compatible fallback) not configured')
   let lastErr: unknown = null
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
     try {
-      const res = await fetch(DEEPSEEK_API_URL, {
+      const res = await fetch(NEWS_AI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          Authorization: `Bearer ${NEWS_AI_API_KEY}`,
         },
         body: JSON.stringify({
           model,
@@ -127,16 +147,13 @@ async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { 
           temperature: 0.3,
           max_tokens: opts?.maxTokens || 8192,
           stream: false,
-          // News extraction is narrow structured work. Disabling thinking keeps
-          // latency and output token spend predictable.
-          thinking: { type: 'disabled' },
           ...(opts?.json ? { response_format: { type: 'json_object' } } : {}),
         }),
         signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS),
       })
       if (!res.ok) {
         const errText = await res.text()
-        const msg = `DeepSeek ${res.status} (${model}): ${errText.slice(0, 150)}`
+        const msg = `Model API ${res.status} (${model}): ${errText.slice(0, 150)}`
         // Retry on transient errors (503 overloaded, 429 rate limit, 5xx)
         if ((res.status >= 500 || res.status === 429) && attempt < MAX_ATTEMPTS_PER_MODEL) {
           const backoffMs = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)  // 1s
@@ -156,9 +173,9 @@ async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { 
       // Do NOT return it — safeParseJson would repair broken JSON and we would
       // silently store a half-written take.
       if (choice?.finish_reason === 'length') {
-        throw new Error(`DeepSeek ${model} hit token limit — output truncated`)
+        throw new Error(`Model ${model} hit token limit — output truncated`)
       }
-      if (!text.trim()) throw new Error(`DeepSeek ${model} returned empty content`)
+      if (!text.trim()) throw new Error(`Model ${model} returned empty content`)
       return text
     } catch (err) {
       lastErr = err
@@ -174,7 +191,7 @@ async function callDeepSeekModelAttempt(model: string, prompt: string, opts?: { 
       throw err
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error(`DeepSeek ${model} exhausted retries`)
+  throw lastErr instanceof Error ? lastErr : new Error(`Model ${model} exhausted retries`)
 }
 
 export type RssItem = {
@@ -185,72 +202,26 @@ export type RssItem = {
   source:      string
 }
 
-// Google News RSS — reliable, not bot-blocked (unlike scraping publishers directly).
-// Each "source" is a search query. The "when:7d" operator restricts to last 7 days.
-//
-// Strategy: 80% SEA-focused feeds, 20% global feeds (US/China/Japan/Korea/Europe).
-// Global news matters to SEA founders — it predicts what reaches the region in 6-12mo
-// (e.g. a US AI funding wave or a China fintech regulation often ripples to SEA).
-//
-// `scope` tags each feed so we keep the right 80/20 balance + can show region tags.
-const SOURCES: Array<{ name: string; url: string; scope: 'sea' | 'global' }> = [
-  // ── SEA feeds (80%) ──
-  {
-    name: 'SEA Fundraising',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+thailand+OR+philippines+OR+malaysia+OR+singapore)+startup+(raises+OR+funding+OR+"series+a"+OR+"series+b"+OR+seed)+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA Venture Capital',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(southeast+asia+OR+indonesia+OR+vietnam+OR+philippines)+(venture+capital+OR+raises+OR+investment)+startup+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA Tech & Policy',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+thailand+OR+philippines+OR+singapore)+(fintech+OR+regulation+OR+"digital+economy"+OR+startup+policy)+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA Exits & M&A',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+philippines+OR+singapore+OR+malaysia)+startup+(acquisition+OR+IPO+OR+acquired+OR+merger)+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA AI & Deep Tech',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+thailand+OR+philippines+OR+singapore+OR+malaysia)+(AI+OR+"artificial+intelligence"+OR+"deep+tech"+OR+SaaS)+startup+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA Consumer & Commerce',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+thailand+OR+philippines)+(e-commerce+OR+logistics+OR+consumer+OR+healthtech+OR+edtech)+startup+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  {
-    name: 'SEA Climate & Fintech',
-    scope: 'sea',
-    url: 'https://news.google.com/rss/search?q=(indonesia+OR+vietnam+OR+philippines+OR+singapore)+(climate+OR+cleantech+OR+"green+energy"+OR+payments+OR+lending)+startup+when:7d&hl=en-SG&gl=SG&ceid=SG:en',
-  },
-  // ── Global feeds (20%) — only major, relevant signals ──
-  {
-    name: 'Global VC & AI',
-    scope: 'global',
-    url: 'https://news.google.com/rss/search?q=(US+OR+"silicon+valley"+OR+europe)+(startup+raises+OR+venture+capital)+(AI+OR+fintech)+when:7d&hl=en-US&gl=US&ceid=US:en',
-  },
-  {
-    name: 'Asia Major Markets',
-    scope: 'global',
-    url: 'https://news.google.com/rss/search?q=(china+OR+japan+OR+"south+korea"+OR+india)+(startup+OR+tech+OR+fintech)+(funding+OR+regulation+OR+IPO)+when:7d&hl=en-US&gl=US&ceid=US:en',
-  },
-]
-
 /**
  * Fetch + parse RSS feed XML into structured items.
  * No external RSS parser dep — we do a lightweight regex parse.
  * Returns empty array on fetch error (don't break the pipeline).
  */
-async function fetchRss(name: string, url: string): Promise<RssItem[]> {
+export type SourceHealth = {
+  name: string
+  scope: NewsScope
+  market: NewsMarket
+  ok: boolean
+  status: number | null
+  itemCount: number
+  latencyMs: number
+  error: string | null
+}
+
+async function fetchRss(source: NewsSource): Promise<{ items: RssItem[]; health: SourceHealth }> {
+  const started = Date.now()
   try {
-    const res = await fetch(url, {
+    const res = await fetch(source.url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/rss+xml, application/xml, text/xml, */*',
@@ -258,16 +229,26 @@ async function fetchRss(name: string, url: string): Promise<RssItem[]> {
       signal: AbortSignal.timeout(15_000),
     })
     if (!res.ok) {
-      console.warn(`[news-pipeline] ${name} fetch failed: ${res.status}`)
-      return []
+      console.warn(`[news-pipeline] ${source.name} fetch failed: ${res.status}`)
+      return {
+        items: [],
+        health: { name: source.name, scope: source.scope, market: source.market, ok: false, status: res.status, itemCount: 0, latencyMs: Date.now() - started, error: `HTTP ${res.status}` },
+      }
     }
     const xml = await res.text()
-    const items = parseRssXml(xml, name)
-    console.log(`[news-pipeline] ${name}: ${items.length} items fetched`)
-    return items
+    const items = parseRssXml(xml, source.name)
+    console.log(`[news-pipeline] ${source.name}: ${items.length} items fetched`)
+    return {
+      items,
+      health: { name: source.name, scope: source.scope, market: source.market, ok: items.length > 0, status: res.status, itemCount: items.length, latencyMs: Date.now() - started, error: items.length > 0 ? null : 'No RSS items parsed' },
+    }
   } catch (err) {
-    console.error(`[news-pipeline] ${name} threw:`, err)
-    return []
+    const message = err instanceof Error ? err.message : String(err)
+    console.error(`[news-pipeline] ${source.name} threw:`, message)
+    return {
+      items: [],
+      health: { name: source.name, scope: source.scope, market: source.market, ok: false, status: null, itemCount: 0, latencyMs: Date.now() - started, error: message.slice(0, 300) },
+    }
   }
 }
 
@@ -320,8 +301,7 @@ function stripCDATA(s: string): string {
 
 export type ExtractedItem = {
   category:               'fundraising' | 'tech' | 'policy' | 'exit'
-  is_sea_relevant:        boolean
-  is_globally_interesting: boolean   // for global-scope items: is it major enough to matter to SEA founders?
+  is_region_relevant:     boolean
   is_roundup:             boolean
   company_name:           string | null
   amount_usd:             number | null
@@ -331,19 +311,21 @@ export type ExtractedItem = {
   lead_investor:          string | null
   ai_summary:             string
   ai_why_it_matters:      string
+  confidence:             number
+  evidence_quality:       'strong' | 'moderate' | 'weak'
 }
 
-function buildExtractionPrompt(scope: 'sea' | 'global'): string {
+function buildExtractionPrompt(scope: NewsScope): string {
   const relevanceRule = scope === 'sea'
-    ? `1. is_sea_relevant: Set TRUE if the article is about Indonesia, Singapore, Malaysia, Vietnam, Thailand, Philippines, Myanmar, Cambodia, Laos, Brunei, or Timor-Leste. Otherwise FALSE.
-   is_globally_interesting: Set FALSE (this is a SEA feed).`
-    : `1. is_sea_relevant: Set FALSE (this is a global feed — it's about US/China/Japan/Korea/Europe/India, not SEA).
-   is_globally_interesting: Set TRUE only if this is a MAJOR signal a SEA founder genuinely needs to know — e.g. a landmark AI funding round, a major fintech regulation in China, a category-defining product, a mega-acquisition, a shift in VC sentiment that will ripple to SEA in 6-12 months. Set FALSE for routine local news with no SEA implication (most items).`
+    ? 'Set is_region_relevant TRUE only when the specific event concerns Southeast Asia: Indonesia, Singapore, Malaysia, Vietnam, Thailand, Philippines, Myanmar, Cambodia, Laos, Brunei, or Timor-Leste.'
+    : scope === 'apac'
+      ? 'Set is_region_relevant TRUE only when the specific event concerns China, Japan, or South Korea. Routine India, Australia, US, Europe, or SEA stories are outside this feed\'s target.'
+      : 'Set is_region_relevant TRUE only for a major global signal that a SEA founder genuinely needs to know: category-defining funding, regulation, product/platform change, market shift, or mega-exit with likely SEA impact. Reject routine local news.'
 
   return `You are an analyst for RaiseSEA, a platform serving Southeast Asian (SEA) startup founders.
 Given an article title + description, extract structured data.
 
-${relevanceRule}
+1. ${relevanceRule}
 
 2. is_roundup: Set TRUE if this is a generic roundup, quarterly/annual review, "deal barometer", ranking list, or aggregate report (e.g. "Q3 2025 Deal Review", "Funding hits $5.4b in 2025"). We only want SPECIFIC events: a named company raising, a specific acquisition, a specific regulation.
 
@@ -353,7 +335,7 @@ ${relevanceRule}
    - "policy" — a SPECIFIC regulation, government rule, or macro shift
    - "exit" — a SPECIFIC acquisition, IPO, or secondary sale
 
-4. country: Infer the single most relevant country. ${scope === 'sea' ? 'For SEA items use the SEA country (Indonesia, Singapore, Vietnam, etc.) — infer from the company HQ. Use "Southeast Asia" only if genuinely region-wide.' : 'For global items use the country (United States, China, Japan, South Korea, India, or a European country).'} Never leave null.
+4. country: Infer the single most relevant country. ${scope === 'sea' ? 'Use the SEA country and infer from the company headquarters. Use "Southeast Asia" only if genuinely region-wide.' : scope === 'apac' ? 'Use China, Japan, or South Korea and infer from the company headquarters.' : 'Use the primary country affected by the event.'} Never leave null.
 
 5. sector: ALWAYS infer (AI/ML, Fintech, SaaS, E-commerce, Healthtech, Logistics, Edtech, Agritech, Cleantech, Deep Tech, Consumer, Cybersecurity, Crypto/Web3, Other). Never null.
 
@@ -361,22 +343,27 @@ ${relevanceRule}
 
 7. ai_summary: 1 sentence, factual, under 25 words.
 
-8. ai_why_it_matters: 1-2 sentences, specific + opinionated, why a SEA founder should care. ${scope === 'global' ? 'For global news, explicitly connect it to SEA implications, e.g. "US AI infra spend signals the wave hitting SEA enterprise SaaS by 2026 — position now."' : 'Be specific and concrete. GOOD example: name the investor and the pattern. BAD example: bland lines like "This shows continued investor interest."'} Avoid bland generalities.
+8. ai_why_it_matters: 1-2 sentences, specific + opinionated, why a SEA founder should care. ${scope === 'sea' ? 'Name the concrete local pattern, company, investor, or policy implication.' : 'Explicitly connect the event to a realistic SEA implication.'} Avoid bland generalities.
+
+9. confidence: A number from 0 to 1 measuring confidence that the event, country, category, and extracted facts are supported by the supplied title/description. Do not reward confident writing.
+
+10. evidence_quality: "strong" when the description contains specific named facts, "moderate" when most key facts are present, or "weak" when the item is vague/second-hand.
 
 Return STRICTLY this JSON (no markdown fences, no trailing commas, no preamble):
 {
   "category": "fundraising",
-  "is_sea_relevant": ${scope === 'sea' ? 'true' : 'false'},
-  "is_globally_interesting": ${scope === 'global' ? 'true' : 'false'},
+  "is_region_relevant": true,
   "is_roundup": false,
   "company_name": null,
   "amount_usd": null,
   "stage": null,
   "sector": "Fintech",
-  "country": "${scope === 'sea' ? 'Indonesia' : 'United States'}",
+  "country": "${scope === 'sea' ? 'Indonesia' : scope === 'apac' ? 'Japan' : 'United States'}",
   "lead_investor": null,
   "ai_summary": "...",
-  "ai_why_it_matters": "..."
+  "ai_why_it_matters": "...",
+  "confidence": 0.86,
+  "evidence_quality": "strong"
 }`
 }
 
@@ -426,7 +413,7 @@ function safeParseJson<T>(raw: string): T | null {
   }
 }
 
-async function extractWithDeepSeek(item: RssItem, scope: 'sea' | 'global', state?: RunState): Promise<ExtractedItem | null> {
+async function extractWithDeepSeek(item: RssItem, scope: NewsScope, state?: RunState): Promise<ExtractedItem | null> {
   try {
     const input = `TITLE: ${item.title}\n\nDESCRIPTION: ${item.description}\n\nSOURCE: ${item.source}`
     const text = await callDeepSeekText(`${buildExtractionPrompt(scope)}\n\n${input}`, { json: true, maxTokens: 2048 }, state)
@@ -462,11 +449,11 @@ function normalizeTitle(t: string): string {
 // Max DeepSeek calls per run — hard cap on how many candidates we extract.
 // Raised from 60: bounded concurrency makes a larger set fit comfortably,
 // and the wall-clock guard (below) is the real safety net against timeouts.
-const MAX_DEEPSEEK_CALLS = 120
+const MAX_DEEPSEEK_CALLS = Math.max(1, Number(process.env.NEWS_MAX_MODEL_CALLS || 120))
 
 // How many DeepSeek extractions run concurrently. ~6 is a safe balance: a big
 // wall-clock speedup without hammering provider rate limits.
-const DEEPSEEK_CONCURRENCY = 6
+const DEEPSEEK_CONCURRENCY = Math.max(1, Number(process.env.NEWS_MODEL_CONCURRENCY || 6))
 
 // Stop LAUNCHING new extractions once the run has been going this long. Each
 // in-flight item is independently bounded by the per-call timeout, so the
@@ -506,103 +493,108 @@ async function runPool<T>(
   await Promise.all(lanes)
 }
 
-export async function runNewsPipeline(): Promise<{
-  fetched: number
-  new:     number
-  skipped: number
-  errors:  number
-}> {
-  let fetched = 0, inserted = 0, skipped = 0, errors = 0
-  let seaInserted = 0, globalInserted = 0
+export async function auditNewsSources(): Promise<SourceHealth[]> {
+  const health: SourceHealth[] = []
+  await runPool(NEWS_SOURCES, 6, async source => {
+    const result = await fetchRss(source)
+    health.push(result.health)
+  })
+  return health.sort((a, b) => a.name.localeCompare(b.name))
+}
 
-  // Existing URLs (last 30 days) so we skip duplicates without a DeepSeek call
+export type NewsPipelineResult = {
+  fetched: number
+  processed: number
+  new: number
+  approved: number
+  pending: number
+  skipped: number
+  errors: number
+  byScope: Record<NewsScope, number>
+  sourceHealth: SourceHealth[]
+  stoppedEarly: boolean
+  dryRun: boolean
+}
+
+export async function runNewsPipeline(options: { dryRun?: boolean; runId?: string | null } = {}): Promise<NewsPipelineResult> {
+  let fetched = 0, inserted = 0, approved = 0, pending = 0, skipped = 0, errors = 0
+  const byScope: Record<NewsScope, number> = { sea: 0, apac: 0, global: 0 }
+  const sourceHealth: SourceHealth[] = []
+
+  // URLs and normalized titles are both checked across runs. This prevents a
+  // syndicated story with a different redirect URL from being re-published.
   const { data: existing } = await supabaseAdmin
     .from('news_items')
-    .select('source_url')
+    .select('source_url, title')
     .gte('created_at', new Date(Date.now() - 30 * 86400 * 1000).toISOString())
   const existingUrls = new Set((existing || []).map(r => r.source_url))
-
+  const seenTitles = new Set((existing || []).map(r => normalizeTitle(r.title || '')).filter(Boolean))
   const sevenDaysAgoMs = Date.now() - 7 * 86400 * 1000
 
-  // ── STAGE 1: fetch all feeds + pre-filter using FREE rss data (no DeepSeek) ──
-  type Candidate = { item: RssItem; scope: 'sea' | 'global'; pubMs: number }
-  const seaCandidates: Candidate[] = []
-  const globalCandidates: Candidate[] = []
-  const seenTitles = new Set<string>()
+  type Candidate = {
+    item: RssItem
+    source: NewsSource
+    scope: NewsScope
+    market: NewsMarket
+    pubMs: number
+  }
+  const candidates: Candidate[] = []
 
-  for (const source of SOURCES) {
-    const items = await fetchRss(source.name, source.url)
-    fetched += items.length
+  // Fetch concurrently in small batches: source failures are isolated and
+  // recorded for the Hermes run status instead of aborting the whole job.
+  await runPool(NEWS_SOURCES, 6, async source => {
+    const result = await fetchRss(source)
+    sourceHealth.push(result.health)
+    fetched += result.items.length
 
-    for (const item of items) {
-      // 1. Already in DB?
+    for (const item of result.items) {
       if (existingUrls.has(item.link)) { skipped++; continue }
-
-      // 2. Dedupe by normalized title (same story across feeds)
       const normTitle = normalizeTitle(item.title)
-      if (seenTitles.has(normTitle)) { skipped++; continue }
+      if (!normTitle || seenTitles.has(normTitle)) { skipped++; continue }
 
-      // 3. Date window — reject older than 7 days using RSS pubDate (FREE)
       const pubDate = item.pubDate ? new Date(item.pubDate) : null
       const pubMs = pubDate && !isNaN(pubDate.getTime()) ? pubDate.getTime() : Date.now()
       if (pubMs < sevenDaysAgoMs) { skipped++; continue }
-
-      // 4. Roundup keywords in title (FREE)
-      const lowerTitle = item.title.toLowerCase()
-      if (ROUNDUP_KEYWORDS.some(kw => lowerTitle.includes(kw))) { skipped++; continue }
+      if (ROUNDUP_KEYWORDS.some(kw => item.title.toLowerCase().includes(kw))) { skipped++; continue }
 
       seenTitles.add(normTitle)
-      const cand: Candidate = { item, scope: source.scope, pubMs }
-      if (source.scope === 'sea') seaCandidates.push(cand)
-      else globalCandidates.push(cand)
+      candidates.push({ item, source, scope: source.scope, market: source.market, pubMs })
     }
-  }
+  })
 
-  // ── STAGE 2: build a capped, balanced work list (80/20 SEA/global) ──
-  // Sort each pool newest-first so we process the freshest news within our call budget.
-  seaCandidates.sort((a, b) => b.pubMs - a.pubMs)
-  globalCandidates.sort((a, b) => b.pubMs - a.pubMs)
+  const workList = selectBalancedCandidates(
+    candidates.map(candidate => ({ value: candidate, scope: candidate.scope, market: candidate.market, pubMs: candidate.pubMs })),
+    MAX_DEEPSEEK_CALLS,
+  ).map(candidate => candidate.value)
 
-  const globalBudget = Math.min(globalCandidates.length, Math.floor(MAX_DEEPSEEK_CALLS * 0.2))
-  const seaBudget = Math.min(seaCandidates.length, MAX_DEEPSEEK_CALLS - globalBudget)
-  const workList: Candidate[] = [
-    ...seaCandidates.slice(0, seaBudget),
-    ...globalCandidates.slice(0, globalBudget),
-  ]
+  const candidateCounts = candidates.reduce<Record<NewsScope, number>>(
+    (acc, candidate) => { acc[candidate.scope]++; return acc },
+    { sea: 0, apac: 0, global: 0 },
+  )
+  console.log(`[news-pipeline] pre-filter done. candidates: sea=${candidateCounts.sea} apac=${candidateCounts.apac} global=${candidateCounts.global}. Processing ${workList.length} (cap ${MAX_DEEPSEEK_CALLS}).`)
 
-  console.log(`[news-pipeline] pre-filter done. candidates: sea=${seaCandidates.length} global=${globalCandidates.length}. Processing ${workList.length} (cap ${MAX_DEEPSEEK_CALLS}).`)
-
-  // ── STAGE 3: DeepSeek extraction (bounded concurrency + wall-clock guard) ──
-  // Process the work list with a small pool of concurrent workers instead of
-  // one-at-a-time. The wall-clock guard stops launching NEW work before we
-  // approach the 300s Vercel ceiling, and each in-flight call is bounded by
-  // PER_ATTEMPT_TIMEOUT_MS — so the run ALWAYS returns cleanly. The flash
-  // circuit breaker lives in runState (pro is retained as the fallback).
   const runState = makeRunState()
   const pipelineStart = Date.now()
   let processed = 0
   let stoppedEarly = false
 
-  const handleCandidate = async ({ item, scope, pubMs }: Candidate): Promise<void> => {
+  const handleCandidate = async ({ item, source, scope, pubMs }: Candidate): Promise<void> => {
     processed++
-
     const extracted = await extractWithDeepSeek(item, scope, runState)
     if (!extracted) { errors++; return }
+    if (extracted.is_roundup || !extracted.is_region_relevant) { skipped++; return }
 
-    if (extracted.is_roundup) { skipped++; return }
-    if (scope === 'sea' && !extracted.is_sea_relevant) { skipped++; return }
-    if (scope === 'global' && !extracted.is_globally_interesting) { skipped++; return }
+    const decision = decidePublication(extracted, source)
+    if (decision.action === 'skip') { skipped++; return }
+    if (decision.action === 'approved') approved++
+    else pending++
 
-    // Guard: a truncated/garbled DeepSeek reply can still parse (via safeParseJson's
-    // repair path) into an object whose AI fields are empty. Don't persist a
-    // half-baked row — skip it and let the next cron retry the URL (RSS + URL
-    // dedupe keep the pipeline idempotent, so nothing is lost permanently).
-    if (!extracted.ai_summary?.trim() || !extracted.ai_why_it_matters?.trim()) {
-      console.warn('[news-pipeline] dropping item with empty AI fields:', item.title.slice(0, 60))
-      errors++
+    if (options.dryRun) {
+      byScope[scope]++
       return
     }
 
+    const nowIso = new Date().toISOString()
     const { error } = await supabaseAdmin
       .from('news_items')
       .insert({
@@ -618,19 +610,25 @@ export async function runNewsPipeline(): Promise<{
         source_name:       item.source,
         ai_summary:        extracted.ai_summary,
         ai_why_it_matters: extracted.ai_why_it_matters,
-        status:            'pending',
+        ai_confidence:     decision.confidence,
+        review_reason:     decision.reason,
+        source_tier:       source.tier,
+        pipeline_run_id:   options.runId || null,
+        status:            decision.action,
+        approved_at:       decision.action === 'approved' ? nowIso : null,
+        approved_by:       null,
         published_at:      new Date(pubMs).toISOString(),
         region_scope:      scope,
       })
     if (error) {
-      // 23505 = unique violation (a concurrent worker inserted the same URL first) → treat as dup
       if (error.code !== '23505') { console.error('[news-pipeline] insert failed:', error.message); errors++ }
       else skipped++
-    } else {
-      inserted++
-      if (scope === 'global') globalInserted++; else seaInserted++
-      existingUrls.add(item.link)
+      return
     }
+
+    inserted++
+    byScope[scope]++
+    existingUrls.add(item.link)
   }
 
   await runPool(workList, DEEPSEEK_CONCURRENCY, handleCandidate, () => {
@@ -639,11 +637,12 @@ export async function runNewsPipeline(): Promise<{
   })
 
   if (stoppedEarly) {
-    console.warn(`[news-pipeline] wall-clock guard hit (${WALL_CLOCK_BUDGET_MS}ms) — stopped launching new items. Processed ${processed}/${workList.length}; remainder deferred to next run.`)
+    console.warn(`[news-pipeline] wall-clock guard hit (${WALL_CLOCK_BUDGET_MS}ms) — processed ${processed}/${workList.length}; remainder deferred.`)
   }
 
-  console.log(`[news-pipeline] complete. fetched=${fetched} processed=${processed} new=${inserted} (sea=${seaInserted} global=${globalInserted}) skipped=${skipped} errors=${errors}${stoppedEarly ? ' [stopped early — budget guard]' : ''}`)
-  return { fetched, new: inserted, skipped, errors }
+  const qualified = options.dryRun ? approved + pending : inserted
+  console.log(`[news-pipeline] complete. fetched=${fetched} processed=${processed} qualified=${qualified} inserted=${inserted} approved=${approved} pending=${pending} scopes=${JSON.stringify(byScope)} skipped=${skipped} errors=${errors}${options.dryRun ? ' [dry-run]' : ''}${stoppedEarly ? ' [stopped early]' : ''}`)
+  return { fetched, processed, new: inserted, approved, pending, skipped, errors, byScope, sourceHealth, stoppedEarly, dryRun: !!options.dryRun }
 }
 
 /**
@@ -672,14 +671,16 @@ export async function generateEditorsTake(): Promise<EditorsTake | null> {
     return null
   }
 
-  // Split SEA vs global so the prompt can keep the 80/20 emphasis
+  // Keep the same 40/40/20 editorial balance used during discovery.
   const seaItems = items.filter(i => (i.region_scope || 'sea') === 'sea')
+  const apacItems = items.filter(i => i.region_scope === 'apac')
   const globalItems = items.filter(i => i.region_scope === 'global')
 
   const fmtItem = (it: typeof items[number], i: number) =>
     `${i + 1}. [${it.category}] ${it.company_name || '(no company)'} · ${it.sector || '?'} · ${it.country || '?'} · ${it.amount_usd ? '$' + (it.amount_usd / 1e6).toFixed(1) + 'M ' : ''}${it.stage || ''}${it.lead_investor ? ' · led by ' + it.lead_investor : ''} — ${it.ai_summary}`
 
   const seaBlock = seaItems.map(fmtItem).join('\n')
+  const apacBlock = apacItems.length > 0 ? apacItems.map(fmtItem).join('\n') : '(none this week)'
   const globalBlock = globalItems.length > 0 ? globalItems.map(fmtItem).join('\n') : '(none this week)'
 
   const prompt = `You are the editor of RaiseSEA, writing the weekly market take for Southeast Asian startup founders.
@@ -689,16 +690,21 @@ Write a structured take with THREE parts:
 2. body — ONE flowing paragraph (4-6 sentences) that touches on MULTIPLE categories this week: include 1-2 sentences on FUNDRAISING, 1-2 on TECH/product, and a sentence on POLICY and/or EXITS if notable. Weave them into one cohesive paragraph, not a list. Cite SPECIFIC numbers/companies/investors from the data.
 3. takeaway — ONE actionable line for founders, starting with "What to do:" or "Watch:". Concrete. Do NOT repeat this line inside the body.
 
-CRITICAL FOCUS RULE — 80/20:
-- ~80% of the take is about SOUTHEAST ASIA (SEA NEWS below). Headline + most of body MUST center on SEA.
-- ~20% may reference GLOBAL signals — ONLY as supporting context for SEA founders. Never lead with a global/US company.
+CRITICAL FOCUS RULE — 40/40/20:
+- ~40% Southeast Asia: local funding, products, policy and exits.
+- ~40% APAC: primarily China, Japan and South Korea, always connected to what SEA founders can learn or anticipate.
+- ~20% global: only major signals with credible SEA implications.
+- The headline may lead with SEA or an APAC development with a clear SEA consequence. Never lead with routine US/European news.
 
 TONE: smart friend texting, confident, specific. AVOID cliches like "this week saw", "the ecosystem continued".
 
-SEA NEWS (primary — 80%):
+SOUTHEAST ASIA NEWS (~40%):
 ${seaBlock}
 
-GLOBAL NEWS (supporting context only — max 20%):
+CHINA, JAPAN AND SOUTH KOREA NEWS (~40%):
+${apacBlock}
+
+GLOBAL NEWS (max 20%):
 ${globalBlock}
 
 Return STRICTLY this JSON (no markdown fences, no trailing commas, do NOT repeat the takeaway inside body):

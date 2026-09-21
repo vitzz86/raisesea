@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "files": [
+    "lib/news-sources.ts",
+    "lib/news-quality.ts",
+    "lib/news-pipeline.ts",
+    "lib/editorial-autofill.ts",
+    "scripts/hermes-news-runner.ts",
+    "tests/news-sources.test.ts",
+    "tests/news-quality.test.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}
