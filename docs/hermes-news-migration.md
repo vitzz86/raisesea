@@ -26,9 +26,11 @@ Use two Hermes cron jobs so Monday cannot send twice:
 
 The runner uses a unique period key and the digest has per-recipient idempotency, so a retry does not duplicate a completed run or email.
 
+The production jobs are named `RaiseSEA Daily News Intelligence` and `RaiseSEA Weekly Intelligence & Digest`. Both load the `raisesea-news-intelligence` skill and the terminal toolset, run without routine approval, and resolve to 08:00 Asia/Jakarta in the Hermes dashboard. The Vercel cron is disabled in `vercel.json`; the authenticated API route remains available as a manual rollback path.
+
 ## Deployment sequence
 
-1. Apply `v21_hermes_news_intelligence.sql`.
+1. Apply `v23_hermes_news_intelligence.sql`.
 2. Install the repository on Hermes and configure the variables in `hermes/news-intelligence.env.example` through Hermes Keys.
 3. Run `source-audit`, then `dry-run`.
 4. Run one forced daily shadow test and inspect `news_pipeline_runs` plus inserted records.
