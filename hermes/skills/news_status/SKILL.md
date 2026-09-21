@@ -1,6 +1,6 @@
 ---
 name: news_status
-description: Show the latest RaiseSEA news automation run and whether it succeeded.
+description: Show the latest RaiseSEA news automation run and health.
 ---
 
 # News Status

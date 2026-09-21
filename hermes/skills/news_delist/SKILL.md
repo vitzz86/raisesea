@@ -1,6 +1,6 @@
 ---
 name: news_delist
-description: Delist or restore a RaiseSEA news story by exact item ID.
+description: Delist or restore a RaiseSEA story by exact item ID.
 ---
 
 # Delist Published News

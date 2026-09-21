@@ -1,6 +1,6 @@
 ---
 name: news_edit
-description: Safely edit a published RaiseSEA news story by exact item ID.
+description: Safely edit a published RaiseSEA story by exact item ID.
 ---
 
 # Edit Published News

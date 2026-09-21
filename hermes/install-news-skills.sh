@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-hermes_root="${HERMES_HOME:-/opt/data/.hermes}"
+hermes_root="${HERMES_HOME:-/opt/data}"
 skills_root="${hermes_root}/skills"
 
 mkdir -p "${skills_root}"

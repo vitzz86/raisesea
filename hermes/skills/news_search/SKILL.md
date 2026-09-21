@@ -1,6 +1,6 @@
 ---
 name: news_search
-description: Search RaiseSEA's published news by company, market, sector or keyword.
+description: Search RaiseSEA news by company, market, sector, or topic.
 ---
 
 # Search Published News

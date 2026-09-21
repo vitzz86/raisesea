@@ -1,6 +1,6 @@
 ---
 name: news_run_daily
-description: Run RaiseSEA news ingestion now and refresh the public Weekly news page.
+description: Run RaiseSEA news ingestion and refresh Weekly news.
 ---
 
 # Run Daily News
