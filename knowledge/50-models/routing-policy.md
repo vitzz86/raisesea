@@ -30,4 +30,18 @@ Route by risk, not by novelty.
 
 ## Cost controls
 
-Use concise system prompts, retrieve only relevant knowledge notes, cap low-risk responses, cache stable summaries and route routine classification away from premium models. Compare models on RaiseSEA-specific benchmark tasks before changing defaults.
+Budget and request-expansion guardrails live in `hermes/cost-control.env.example`. The hard ceilings are a monthly and daily USD budget, a per-turn provider-call cap and a per-turn token budget. When a ceiling is reached the turn stops or degrades to the low-risk tier; it never silently keeps spending.
+
+Operational rules:
+
+- Keep system prompts concise and retrieve only the knowledge notes the task needs.
+- Compact context before re-reading the knowledge base or re-sending history; long-context turns are the dominant cost driver.
+- Cap low-risk responses and cache stable summaries; route routine classification and formatting away from premium models.
+- Do not loop: if a task needs more than the per-turn call cap, stop and report the blocker instead of retrying the same step.
+- Log provider, model, task class, latency, failure and estimated cost without logging prompts that contain secrets.
+
+## OpenRouter key cap
+
+Use a dedicated OpenRouter key named "Hermes" with a monthly spend limit set in the OpenRouter dashboard. That account-level cap is the last line of defense if the gateway misbehaves. Record the limit in `hermes/cost-control.env.example` and review it whenever the model routing changes.
+
+Compare models on RaiseSEA-specific benchmark tasks before changing defaults.

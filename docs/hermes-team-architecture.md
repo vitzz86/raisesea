@@ -34,7 +34,7 @@ Each Telegram-enabled profile needs its own BotFather token. Do not reuse the Ne
 
 ## Phase 5 — Model and cost strategy
 
-Apply `knowledge/50-models/routing-policy.md`. Cheap or free models are limited to idea capture, classification, reminders and formatting. Nemotron is explicitly prohibited for coding. Model IDs and pricing are operational data: verify them before activation and benchmark them on RaiseSEA tasks.
+Apply `knowledge/50-models/routing-policy.md`. Cheap or free models are limited to idea capture, classification, reminders and formatting. Nemotron is explicitly prohibited for coding. Model IDs and pricing are operational data: verify them before activation and benchmark them on RaiseSEA tasks. Apply the budget and request-expansion ceilings in `hermes/cost-control.env.example`, and set the matching monthly spend limit on the dedicated OpenRouter "Hermes" key — the one account-level step done in the OpenRouter dashboard, not in code.
 
 ## Installation
 
