@@ -51,7 +51,7 @@ async function main() {
   loadRuntimeEnvironment()
   const [
     { supabaseAdmin },
-    { autoGenerateTakeIfMissing },
+    { refreshEditorialContent },
     { sendWeeklyDigest },
     { auditNewsSources, runNewsPipeline },
   ] = await Promise.all([
@@ -117,10 +117,12 @@ async function main() {
       throw new Error(`Model/extraction error rate above threshold: ${pipeline.errors}/${pipeline.processed}`)
     }
 
-    let editorial: Awaited<ReturnType<typeof autoGenerateTakeIfMissing>> | null = null
+    let editorial: Awaited<ReturnType<typeof refreshEditorialContent>> | null = null
     let digest: Awaited<ReturnType<typeof sendWeeklyDigest>> | null = null
+    if (mode !== 'dry-run' && (pipeline.approved > 0 || mode === 'weekly')) {
+      editorial = await refreshEditorialContent(now, true)
+    }
     if (mode === 'weekly') {
-      editorial = await autoGenerateTakeIfMissing(now)
       digest = await sendWeeklyDigest({ triggeredBy: 'cron' })
       if (digest.skippedReason === 'safety_floor') {
         throw new Error(`Weekly digest blocked by safety floor: ${JSON.stringify({ editorial, digest })}`)

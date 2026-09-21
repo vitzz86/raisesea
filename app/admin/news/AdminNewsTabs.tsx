@@ -58,7 +58,7 @@ export default function AdminNewsTabs({
   return (
     <div>
       <div className="flex gap-1 border-b border-border mb-5">
-        <TabBtn active={tab === 'queue'}  onClick={() => setTab('queue')}>Review queue ({items.filter(i => i.status === 'pending').length})</TabBtn>
+        <TabBtn active={tab === 'queue'}  onClick={() => setTab('queue')}>Published news ({items.filter(i => i.status === 'approved').length})</TabBtn>
         <TabBtn active={tab === 'editor'} onClick={() => setTab('editor')}>Editor&apos;s take</TabBtn>
         <TabBtn active={tab === 'send'}   onClick={() => setTab('send')}>Send digest</TabBtn>
       </div>
@@ -116,15 +116,14 @@ function TabBtn({ children, active, onClick }: { children: React.ReactNode; acti
   )
 }
 
-// ─── Review queue tab ─────────────────────────────────────────
+// ─── Published news tab ───────────────────────────────────────
 
 function QueueTab({ items }: { items: Item[] }) {
   const router = useRouter()
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sectorFilter, setSectorFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('pending')
+  const [statusFilter, setStatusFilter] = useState<string>('approved')
   const [generating, setGenerating] = useState(false)
-  const [approvingAll, setApprovingAll] = useState(false)
 
   // All sectors present in the current items (for the filter dropdown)
   const availableSectors = Array.from(
@@ -137,9 +136,6 @@ function QueueTab({ items }: { items: Item[] }) {
     if (sectorFilter !== 'all' && i.sector !== sectorFilter) return false
     return true
   })
-
-  // Pending items in the CURRENT filtered view — these are what "Approve all" acts on
-  const pendingInView = filtered.filter(i => i.status === 'pending')
 
   async function generateNow() {
     setGenerating(true)
@@ -156,30 +152,6 @@ function QueueTab({ items }: { items: Item[] }) {
     }
   }
 
-  async function approveAll() {
-    if (pendingInView.length === 0) return
-    const label = sectorFilter !== 'all' || categoryFilter !== 'all'
-      ? `${pendingInView.length} pending item(s) in the current filter`
-      : `all ${pendingInView.length} pending item(s)`
-    if (!confirm(`Approve ${label}? You can still reject individual items afterward.`)) return
-    setApprovingAll(true)
-    try {
-      const res = await fetch('/api/admin/news/bulk-approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: pendingInView.map(i => i.id) }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Bulk approve failed')
-      alert(`Approved ${data.approved} item(s).`)
-      router.refresh()
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error')
-    } finally {
-      setApprovingAll(false)
-    }
-  }
-
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -187,18 +159,13 @@ function QueueTab({ items }: { items: Item[] }) {
           className="bg-brand hover:bg-brand-hover text-white text-sm font-medium rounded-md px-3 py-1.5 disabled:opacity-50">
           {generating ? 'Generating…' : '⚡ Generate now (fetch RSS + extract)'}
         </button>
-        {pendingInView.length > 0 && (
-          <button onClick={approveAll} disabled={approvingAll}
-            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-md px-3 py-1.5 disabled:opacity-50">
-            {approvingAll ? 'Approving…' : `✓ Approve all (${pendingInView.length})`}
-          </button>
-        )}
+        <span className="text-xs text-text-tertiary">Qualified stories publish automatically. Edit or delist exceptions here.</span>
         <div className="flex-1" />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="text-xs border border-border-strong rounded-md px-2 py-1">
-          <option value="pending">Pending</option>
           <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
+          <option value="rejected">Delisted</option>
+          <option value="pending">Legacy pending</option>
           <option value="all">All statuses</option>
         </select>
         <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
@@ -229,7 +196,18 @@ function QueueTab({ items }: { items: Item[] }) {
 function ItemRow({ item, onChange }: { item: Item; onChange: () => void }) {
   const [working, setWorking] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [why, setWhy] = useState(item.ai_why_it_matters || '')
+  const [draft, setDraft] = useState({
+    title: item.title,
+    category: item.category,
+    company_name: item.company_name || '',
+    amount_usd: item.amount_usd?.toString() || '',
+    stage: item.stage || '',
+    sector: item.sector || '',
+    country: item.country || '',
+    lead_investor: item.lead_investor || '',
+    ai_summary: item.ai_summary || '',
+    ai_why_it_matters: item.ai_why_it_matters || '',
+  })
 
   async function patch(updates: Record<string, unknown>) {
     setWorking(true)
@@ -246,12 +224,12 @@ function ItemRow({ item, onChange }: { item: Item; onChange: () => void }) {
     } finally { setWorking(false) }
   }
 
-  async function destroy() {
-    if (!confirm('Delete this item permanently?')) return
+  async function delist() {
+    if (!confirm('Delist this story? It will disappear from Weekly news immediately and can be restored later.')) return
     setWorking(true)
     try {
       const res = await fetch(`/api/admin/news/${item.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete failed')
+      if (!res.ok) throw new Error('Delist failed')
       onChange()
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error')
@@ -300,13 +278,53 @@ function ItemRow({ item, onChange }: { item: Item; onChange: () => void }) {
       )}
 
       {editing ? (
-        <div className="mb-2">
-          <textarea value={why} onChange={e => setWhy(e.target.value)} rows={3}
-            className="w-full text-xs border border-border-strong rounded-md p-2 focus:outline-none focus:border-brand" />
+        <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label className="sm:col-span-2 text-[10px] uppercase text-text-tertiary">Headline
+            <input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Category
+            <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case">
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Company
+            <input value={draft.company_name} onChange={e => setDraft({ ...draft, company_name: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Amount (USD)
+            <input type="number" min="0" value={draft.amount_usd} onChange={e => setDraft({ ...draft, amount_usd: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Stage
+            <input value={draft.stage} onChange={e => setDraft({ ...draft, stage: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Sector
+            <input value={draft.sector} onChange={e => setDraft({ ...draft, sector: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="text-[10px] uppercase text-text-tertiary">Country
+            <input value={draft.country} onChange={e => setDraft({ ...draft, country: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="sm:col-span-2 text-[10px] uppercase text-text-tertiary">Lead investor
+            <input value={draft.lead_investor} onChange={e => setDraft({ ...draft, lead_investor: e.target.value })}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="sm:col-span-2 text-[10px] uppercase text-text-tertiary">Summary
+            <textarea value={draft.ai_summary} onChange={e => setDraft({ ...draft, ai_summary: e.target.value })} rows={2}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
+          <label className="sm:col-span-2 text-[10px] uppercase text-text-tertiary">Why it matters
+            <textarea value={draft.ai_why_it_matters} onChange={e => setDraft({ ...draft, ai_why_it_matters: e.target.value })} rows={3}
+              className="mt-1 w-full text-xs border border-border-strong rounded-md p-2 normal-case" />
+          </label>
           <div className="flex gap-2 mt-1">
-            <button onClick={() => { patch({ ai_why_it_matters: why }); setEditing(false) }}
+            <button onClick={() => { patch({ ...draft, amount_usd: draft.amount_usd ? Number(draft.amount_usd) : null }); setEditing(false) }}
               className="text-xs bg-brand text-white rounded px-2 py-1">Save</button>
-            <button onClick={() => { setWhy(item.ai_why_it_matters || ''); setEditing(false) }}
+            <button onClick={() => setEditing(false)}
               className="text-xs text-text-tertiary">Cancel</button>
           </div>
         </div>
@@ -322,29 +340,14 @@ function ItemRow({ item, onChange }: { item: Item; onChange: () => void }) {
         <a href={item.source_url} target="_blank" rel="noopener noreferrer"
           className="text-xs text-brand underline">Source ↗</a>
         <div className="flex-1" />
-        {item.status === 'pending' && (
-          <>
-            <button onClick={() => patch({ status: 'approved' })} disabled={working}
-              className="text-xs bg-green-600 hover:bg-green-700 text-white rounded px-2 py-1 disabled:opacity-50">
-              ✓ Approve
-            </button>
-            <button onClick={() => setEditing(true)} disabled={working}
-              className="text-xs border border-border-strong hover:border-text-tertiary rounded px-2 py-1">
-              ✏ Edit
-            </button>
-            <button onClick={() => patch({ status: 'rejected' })} disabled={working}
-              className="text-xs border border-red-300 text-danger-text hover:bg-danger-bg rounded px-2 py-1">
-              ✗ Reject
-            </button>
-          </>
-        )}
-        {item.status !== 'pending' && (
-          <>
-            <button onClick={() => patch({ status: 'pending' })} disabled={working}
-              className="text-xs text-text-tertiary hover:underline">↩ Reopen</button>
-            <button onClick={destroy} disabled={working}
-              className="text-xs text-danger-text hover:underline">🗑 Delete</button>
-          </>
+        <button onClick={() => setEditing(true)} disabled={working}
+          className="text-xs border border-border-strong hover:border-text-tertiary rounded px-2 py-1">✏ Edit</button>
+        {item.status === 'approved' ? (
+          <button onClick={delist} disabled={working}
+            className="text-xs border border-red-300 text-danger-text hover:bg-danger-bg rounded px-2 py-1">Delist</button>
+        ) : (
+          <button onClick={() => patch({ status: 'approved' })} disabled={working}
+            className="text-xs bg-green-600 hover:bg-green-700 text-white rounded px-2 py-1">Restore / publish</button>
         )}
       </div>
     </div>

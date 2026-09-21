@@ -10,6 +10,7 @@
     "lib/news-pipeline.ts",
     "lib/editorial-autofill.ts",
     "scripts/hermes-news-runner.ts",
+    "scripts/hermes-news-control.ts",
     "tests/news-sources.test.ts",
     "tests/news-quality.test.ts"
   ],
