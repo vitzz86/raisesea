@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-type Command = 'status' | 'latest' | 'weekly' | 'search' | 'coverage' | 'edit' | 'delist' | 'restore'
+type Command = 'status' | 'latest' | 'weekly' | 'retry-weekly' | 'search' | 'coverage' | 'edit' | 'delist' | 'restore'
 
 function loadRuntimeEnvironment() {
   const candidates = [process.env.NEWS_ENV_FILE, '/opt/data/.env', resolve(process.cwd(), '.env.local'), resolve(process.cwd(), '.env')]
@@ -34,7 +34,7 @@ function nullable(value: string | boolean | undefined): string | null | undefine
 
 function requireConfirmation(input: Record<string, string | boolean>) {
   if (input.confirm !== true) {
-    throw new Error('Mutation blocked: repeat with --confirm after the operator explicitly confirms the exact item ID and change.')
+    throw new Error('Mutation blocked: repeat with --confirm after the operator explicitly confirms the exact requested change.')
   }
 }
 
@@ -46,8 +46,8 @@ async function main() {
 
   const input = args()
   const command = text(input.command) as Command | null
-  if (!command || !['status', 'latest', 'weekly', 'search', 'coverage', 'edit', 'delist', 'restore'].includes(command)) {
-    throw new Error('Use --command=status|latest|weekly|search|coverage|edit|delist|restore')
+  if (!command || !['status', 'latest', 'weekly', 'retry-weekly', 'search', 'coverage', 'edit', 'delist', 'restore'].includes(command)) {
+    throw new Error('Use --command=status|latest|weekly|retry-weekly|search|coverage|edit|delist|restore')
   }
   const { supabaseAdmin } = await import('../lib/supabase')
 
@@ -83,6 +83,20 @@ async function main() {
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (error) throw error
     console.log(JSON.stringify({ ok: true, command, editorial: data }, null, 2))
+    return
+  }
+
+  if (command === 'retry-weekly') {
+    requireConfirmation(input)
+    if (!(process.env.NEWS_AI_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY)) {
+      throw new Error('Missing NEWS_AI_API_KEY (or compatible fallback)')
+    }
+    const { refreshEditorialContent } = await import('../lib/editorial-autofill')
+    const result = await refreshEditorialContent(new Date(), true)
+    if (result.issues.length > 0 || (!result.created && !result.updated && !result.preservedManual)) {
+      throw new Error(`Weekly regeneration failed: ${result.issues.join('; ') || 'no editorial artifact was written'}`)
+    }
+    console.log(JSON.stringify({ ok: true, command, emailSent: false, editorial: result }, null, 2))
     return
   }
 
