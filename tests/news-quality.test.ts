@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decidePublication } from '../lib/news-quality'
+import { decidePublication, isNearDuplicateTitle } from '../lib/news-quality'
 
 const complete = {
   category: 'fundraising',
@@ -20,18 +20,48 @@ test('auto-publishes strong records from a specialist direct feed', () => {
 
 test('requires higher confidence for discovery/aggregator records', () => {
   const result = decidePublication({ ...complete, confidence: 0.76 }, { kind: 'discovery', tier: 'aggregator' })
-  assert.equal(result.action, 'pending')
-  assert.equal(result.reason, 'confidence_below_auto_publish')
+  assert.equal(result.action, 'approved')
+  assert.equal(result.reason, null)
 })
 
-test('quarantines incomplete but plausible records without blocking the pipeline', () => {
+test('skips incomplete records instead of creating an approval queue', () => {
   const result = decidePublication({ ...complete, company_name: null, confidence: 0.75 }, { kind: 'direct', tier: 'specialist' })
-  assert.equal(result.action, 'pending')
+  assert.equal(result.action, 'skip')
   assert.equal(result.reason, 'missing:company_name')
 })
 
 test('skips weak records', () => {
   const result = decidePublication({ ...complete, confidence: 0.3, evidence_quality: 'weak' }, { kind: 'direct', tier: 'specialist' })
   assert.equal(result.action, 'skip')
-  assert.equal(result.reason, 'low_confidence')
+  assert.equal(result.reason, 'weak_evidence')
+})
+
+test('rejects explicit irrelevance even when the model confidence is high', () => {
+  const result = decidePublication({
+    ...complete,
+    confidence: 0.97,
+    ai_why_it_matters: 'This sports result is not relevant to Southeast Asia startup founders.',
+  }, { kind: 'direct', tier: 'specialist' })
+  assert.equal(result.action, 'skip')
+  assert.equal(result.reason, 'explicitly_not_relevant')
+})
+
+test('skips borderline discovery records without manual review', () => {
+  const result = decidePublication({ ...complete, confidence: 0.71 }, { kind: 'discovery', tier: 'aggregator' })
+  assert.equal(result.action, 'skip')
+  assert.equal(result.reason, 'confidence_below_publish_threshold')
+})
+
+test('detects syndicated versions of the same company event', () => {
+  assert.equal(isNearDuplicateTitle(
+    'Grab takes majority stake in Atome Financial in $1.5 billion deal',
+    ['Grab to acquire majority stake in Atome Financial, accelerating financial services growth'],
+  ), true)
+})
+
+test('keeps different events from the same company', () => {
+  assert.equal(isNearDuplicateTitle(
+    'Grab launches merchant lending product in Indonesia',
+    ['Grab to acquire majority stake in Atome Financial'],
+  ), false)
 })

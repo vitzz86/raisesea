@@ -8,8 +8,8 @@
 //   - company name + amount + sector (if fundraising)
 //   - 1-line summary
 //   - 1-2 sentence "why it matters" with opinionated framing
-// High-confidence items publish automatically. Ambiguous records enter a
-// non-blocking review queue; weak records are skipped.
+// High-confidence items publish automatically; everything else is skipped.
+// Operators edit or delist after publication instead of clearing a queue.
 // ═══════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from './supabase'
@@ -28,7 +28,7 @@ import {
   type NewsScope,
   type NewsSource,
 } from './news-sources'
-import { decidePublication } from './news-quality'
+import { decidePublication, isNearDuplicateTitle } from './news-quality'
 
 const NEWS_AI_API_KEY = process.env.NEWS_AI_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || ''
 const NEWS_AI_API_URL = resolveCompletionsUrl(
@@ -529,6 +529,7 @@ export async function runNewsPipeline(options: { dryRun?: boolean; runId?: strin
     .gte('created_at', new Date(Date.now() - 30 * 86400 * 1000).toISOString())
   const existingUrls = new Set((existing || []).map(r => r.source_url))
   const seenTitles = new Set((existing || []).map(r => normalizeTitle(r.title || '')).filter(Boolean))
+  const comparisonTitles = (existing || []).map(r => r.title || '').filter(Boolean)
   const sevenDaysAgoMs = Date.now() - 7 * 86400 * 1000
 
   type Candidate = {
@@ -550,7 +551,7 @@ export async function runNewsPipeline(options: { dryRun?: boolean; runId?: strin
     for (const item of result.items) {
       if (existingUrls.has(item.link)) { skipped++; continue }
       const normTitle = normalizeTitle(item.title)
-      if (!normTitle || seenTitles.has(normTitle)) { skipped++; continue }
+      if (!normTitle || seenTitles.has(normTitle) || isNearDuplicateTitle(item.title, comparisonTitles)) { skipped++; continue }
 
       const pubDate = item.pubDate ? new Date(item.pubDate) : null
       const pubMs = pubDate && !isNaN(pubDate.getTime()) ? pubDate.getTime() : Date.now()
@@ -558,6 +559,7 @@ export async function runNewsPipeline(options: { dryRun?: boolean; runId?: strin
       if (ROUNDUP_KEYWORDS.some(kw => item.title.toLowerCase().includes(kw))) { skipped++; continue }
 
       seenTitles.add(normTitle)
+      comparisonTitles.push(item.title)
       candidates.push({ item, source, scope: source.scope, market: source.market, pubMs })
     }
   })
@@ -586,8 +588,7 @@ export async function runNewsPipeline(options: { dryRun?: boolean; runId?: strin
 
     const decision = decidePublication(extracted, source)
     if (decision.action === 'skip') { skipped++; return }
-    if (decision.action === 'approved') approved++
-    else pending++
+    approved++
 
     if (options.dryRun) {
       byScope[scope]++
@@ -640,7 +641,7 @@ export async function runNewsPipeline(options: { dryRun?: boolean; runId?: strin
     console.warn(`[news-pipeline] wall-clock guard hit (${WALL_CLOCK_BUDGET_MS}ms) — processed ${processed}/${workList.length}; remainder deferred.`)
   }
 
-  const qualified = options.dryRun ? approved + pending : inserted
+  const qualified = options.dryRun ? approved : inserted
   console.log(`[news-pipeline] complete. fetched=${fetched} processed=${processed} qualified=${qualified} inserted=${inserted} approved=${approved} pending=${pending} scopes=${JSON.stringify(byScope)} skipped=${skipped} errors=${errors}${options.dryRun ? ' [dry-run]' : ''}${stoppedEarly ? ' [stopped early]' : ''}`)
   return { fetched, processed, new: inserted, approved, pending, skipped, errors, byScope, sourceHealth, stoppedEarly, dryRun: !!options.dryRun }
 }

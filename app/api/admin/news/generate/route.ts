@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { getSessionUser } from '@/lib/supabase-server'
 import { isSuperAdmin } from '@/lib/super-admin'
 import { runNewsPipeline } from '@/lib/news-pipeline'
+import { refreshEditorialContent } from '@/lib/editorial-autofill'
 
 export const maxDuration = 300  // 5 min — RSS + DeepSeek can be slow
 
@@ -18,5 +19,6 @@ export async function POST() {
   }
 
   const result = await runNewsPipeline()
-  return NextResponse.json({ ok: true, ...result })
+  const editorial = result.approved > 0 ? await refreshEditorialContent(new Date(), true) : null
+  return NextResponse.json({ ok: true, ...result, editorial })
 }

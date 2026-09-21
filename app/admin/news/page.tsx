@@ -24,7 +24,7 @@ export default async function AdminNewsPage({
     .eq('id', user.id)
     .maybeSingle()
 
-  // Pending + approved items (last 14 days)
+  // Published + delisted items (last 14 days); pending only covers legacy rows.
   const since = new Date(Date.now() - 14 * 86400 * 1000).toISOString()
   const { data: items } = await supabaseAdmin
     .from('news_items')
@@ -58,7 +58,7 @@ export default async function AdminNewsPage({
     <DashboardShell user={user} profile={profile} isAdmin={true} isApprovedExpert={await isApprovedExpert(user.id)} activePath="admin-news">
       <div className="mb-5">
         <h1 className="text-2xl font-semibold text-gray-900">News management</h1>
-        <p className="text-sm text-gray-600 mt-1">Review &amp; approve items, manage editor&apos;s take, send digest.</p>
+        <p className="text-sm text-gray-600 mt-1">News publishes automatically. Edit or delist exceptions, manage the editor&apos;s take, and monitor the digest.</p>
       </div>
 
       <AdminNewsTabs

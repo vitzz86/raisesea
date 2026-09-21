@@ -4,7 +4,7 @@
 
 Hermes owns the schedule, source ingestion, model calls, quality decisions, weekly editorial artifact, digest trigger and operational run record. Supabase remains the source of truth; the RaiseSEA application remains the public UI and email renderer.
 
-No routine approval is required. High-confidence records become `approved` during ingestion. Ambiguous records become `pending` with a reason, but that exception queue never pauses ingestion, editorial generation or delivery. Weak records are skipped.
+No routine approval is required. Complete, relevant and well-supported records become `approved` during ingestion. Incomplete, weak, irrelevant and duplicate records are skipped; new runs never create `pending` items. Operators use edit/delist controls for exceptions after publication.
 
 ## Coverage policy
 
@@ -30,12 +30,18 @@ The production jobs are named `RaiseSEA Daily News Intelligence` and `RaiseSEA W
 
 ## Deployment sequence
 
-1. Apply `v23_hermes_news_intelligence.sql`.
+1. Apply `v23_hermes_news_intelligence.sql` and `v24_retire_news_approval_queue.sql`.
 2. Install the repository on Hermes and configure the variables in `hermes/news-intelligence.env.example` through Hermes Keys.
 3. Run `source-audit`, then `dry-run`.
 4. Run one forced daily shadow test and inspect `news_pipeline_runs` plus inserted records.
 5. Enable the two Hermes schedules.
 6. Disable the Vercel news cron only after Hermes reports a successful real run.
+
+## Telegram operations
+
+Run `hermes/install-news-skills.sh` on the Hermes host, merge `hermes/telegram-command-menu.yaml.example` into the Hermes config, and restart the gateway once. The RaiseSEA bot then exposes `/news_daily`, `/news_status`, `/news_latest`, `/news_weekly`, `/news_search`, `/news_coverage`, `/news_sources`, `/news_edit`, and `/news_delist`.
+
+Read-only commands run immediately. Editing, delisting and restoring require the exact item UUID plus explicit operator confirmation. Delisting is a reversible status change, not permanent deletion.
 
 ## Rollback
 

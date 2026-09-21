@@ -1,0 +1,20 @@
+# Merge this block into ~/.hermes/config.yaml on the Hermes host.
+# Skills are hot-loaded for new sessions; restart the gateway after changing
+# the Telegram command menu so BotFather receives the prioritized commands.
+platforms:
+  telegram:
+    extra:
+      command_menu:
+        max_commands: 60
+        priority_mode: prepend
+        priority:
+          - news_help
+          - news_daily
+          - news_status
+          - news_latest
+          - news_weekly
+          - news_search
+          - news_coverage
+          - news_sources
+          - news_edit
+          - news_delist
