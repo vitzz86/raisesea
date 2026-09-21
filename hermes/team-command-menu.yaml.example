@@ -1,0 +1,35 @@
+# Apply the command set only to the matching profile's config. Do not copy one
+# Telegram credential into multiple profiles; Telegram permits one consumer per bot.
+profiles:
+  raisesea-news-intelligence:
+    commands:
+      - news_help
+      - news_run_daily
+      - news_status
+      - news_latest
+      - news_weekly
+      - news_retry_weekly
+      - news_search
+      - news_coverage
+      - news_sources
+      - news_edit
+      - news_delist
+  raisesea-social-media-manager:
+    commands:
+      - content_draft
+      - content_plan
+      - raisesea_knowledge
+      - raisesea_handoff
+  raisesea-software-engineer:
+    commands:
+      - engineering_plan
+      - engineering_status
+      - raisesea_knowledge
+      - raisesea_handoff
+  raisesea-chief-of-staff:
+    commands:
+      - idea_save
+      - task_add
+      - team_status
+      - raisesea_knowledge
+      - raisesea_handoff

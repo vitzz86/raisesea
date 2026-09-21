@@ -1,0 +1,19 @@
+# Desired RaiseSEA profile inventory. Create these through Hermes Profiles, then
+# run install-team.sh. Values document policy; keep real keys in Hermes Keys.
+profiles:
+  raisesea-news-intelligence:
+    purpose: Autonomous news monitoring, publication, coverage and weekly intelligence
+    model_tier: reasoning
+    telegram_bot: required-existing
+  raisesea-social-media-manager:
+    purpose: Source-backed content planning and drafting
+    model_tier: value
+    telegram_bot: required-before-enabling-channel
+  raisesea-software-engineer:
+    purpose: Repository analysis, coding, tests and pull-request preparation
+    model_tier: coding-protected
+    telegram_bot: required-before-enabling-channel
+  raisesea-chief-of-staff:
+    purpose: Ideas, tasks, reminders, status and cross-profile coordination
+    model_tier: low-cost
+    telegram_bot: required-before-enabling-channel
