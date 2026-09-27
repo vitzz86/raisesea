@@ -58,7 +58,7 @@ export default function AdminNewsTabs({
   return (
     <div>
       <div className="flex gap-1 border-b border-border mb-5">
-        <TabBtn active={tab === 'queue'}  onClick={() => setTab('queue')}>Published news ({items.filter(i => i.status === 'approved').length})</TabBtn>
+        <TabBtn active={tab === 'queue'}  onClick={() => setTab('queue')}>Published news · last 14 days ({items.filter(i => i.status === 'approved').length})</TabBtn>
         <TabBtn active={tab === 'editor'} onClick={() => setTab('editor')}>Editor&apos;s take</TabBtn>
         <TabBtn active={tab === 'send'}   onClick={() => setTab('send')}>Send digest</TabBtn>
       </div>
