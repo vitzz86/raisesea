@@ -16,6 +16,7 @@ type SubmissionRow = {
   sector: string | null
   raise_target_usd: number | null
   analysis_status: string | null
+  analysis_error: string | null
   deck_analysis: string | null
   top_match_score: number | null
   created_at: string
@@ -65,7 +66,7 @@ export default async function DashboardPage() {
   // Pull user's submissions (service role — bypasses RLS for accurate count)
   const { data: rawSubs } = await supabaseAdmin
     .from('submissions')
-    .select('id, unique_slug, company_name, stage, sector, raise_target_usd, analysis_status, deck_analysis, top_match_score, created_at, is_public')
+    .select('id, unique_slug, company_name, stage, sector, raise_target_usd, analysis_status, analysis_error, deck_analysis, top_match_score, created_at, is_public')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -207,7 +208,14 @@ export default async function DashboardPage() {
                         <Td className="text-xs text-text-tertiary">{fmtDate(s.created_at)}</Td>
                         <Td>
                           {s.analysis_status === 'complete' && <span className="inline-flex items-center gap-1 text-xs text-success-text"><span className="w-1.5 h-1.5 rounded-full bg-success-solid" />Complete</span>}
-                          {s.analysis_status === 'failed' && <span className="inline-flex items-center gap-1 text-xs text-danger-text"><span className="w-1.5 h-1.5 rounded-full bg-danger-solid" />Failed</span>}
+                          {s.analysis_status === 'failed' && (
+                            <span
+                              className="inline-flex items-center gap-1 text-xs text-danger-text"
+                              title={s.analysis_error || 'No error detail was recorded for this run.'}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-danger-solid" />Failed
+                            </span>
+                          )}
                           {(!s.analysis_status || s.analysis_status === 'pending') && <span className="inline-flex items-center gap-1 text-xs text-text-tertiary"><span className="w-1.5 h-1.5 rounded-full bg-gray-400" />Pending</span>}
                         </Td>
                         <Td>

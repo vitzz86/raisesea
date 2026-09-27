@@ -229,6 +229,11 @@ export async function POST(req: NextRequest) {
     // Pass canonicalized form stage/sector as overrides — these win over Gemini's
     // interpretation of the deck (founder knows their own stage).
     let fullAnalysis
+    // Why the analysis produced nothing. Previously the caught error was logged
+    // to the console and then discarded, so every failed submission was written
+    // with analysis_error = NULL — leaving no way to tell a rate limit from a
+    // corrupt deck or an upstream outage.
+    let analysisError: string | null = null
     try {
       const topInvestorNames = investorList.slice(0, 100).map(i => i.name)
       fullAnalysis = await runFullAnalysis(
@@ -240,6 +245,7 @@ export async function POST(req: NextRequest) {
       )
     } catch (err) {
       console.error('Gemini analysis failed:', err)
+      analysisError = err instanceof Error ? err.message : String(err)
       // Continue with degraded mode — save what we have
       fullAnalysis = null
     }
@@ -355,6 +361,10 @@ export async function POST(req: NextRequest) {
       market_analysis:        fullAnalysis?.market_analysis ? JSON.stringify(fullAnalysis.market_analysis) : null,
       competitive_analysis:   fullAnalysis?.competitive_analysis ? JSON.stringify(fullAnalysis.competitive_analysis) : null,
       analysis_status:        fullAnalysis ? 'complete' : 'failed',
+      // Persist WHY it failed; null on success so the column stays meaningful.
+      analysis_error:         fullAnalysis
+        ? null
+        : (analysisError || 'Analysis completed without producing a result'),
       status:                 'matched',
     }
 
