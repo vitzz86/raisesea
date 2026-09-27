@@ -25,7 +25,7 @@ import {
   Radar, Lock, Trash2, ServerCog, ShieldCheck, Sparkles, Globe2,
 } from 'lucide-react'
 import { ScrollReveal } from '@/components/landing/ScrollReveal'
-import { RaiseSEAWordmark } from '@/components/brand/RaiseSEAWordmark'
+import { RaiseSEALogo } from '@/components/brand/RaiseSEALogo'
 
 // ─── Shared: section eyebrow + heading ────────────────────────────
 
@@ -778,6 +778,11 @@ export function FinalCta({ signedIn }: { signedIn: boolean }) {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-grid opacity-70" />
       <div className="max-w-3xl mx-auto text-center">
         <ScrollReveal>
+          {/* The transparent white variant, used where the manifest says it
+              belongs: on a dark green band. */}
+          <div className="mb-8 flex justify-center">
+            <RaiseSEALogo variant="onDark" height={30} />
+          </div>
           <h2 id="final-cta-heading" className="text-xl font-semibold leading-tight tracking-tight text-balance md:text-2xl">
             Ready to make your raise investor-ready?
           </h2>
@@ -844,7 +849,7 @@ export function SiteFooter() {
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Link href="/" className="inline-flex min-h-[44px] items-center rounded-input">
-              <RaiseSEAWordmark markSize={34} withTagline />
+              <RaiseSEALogo variant="primary" height={34} />
             </Link>
             <p className="text-sm text-text-tertiary mt-3 leading-relaxed max-w-xs">
               Fundraising intelligence and execution for founders across Asia Pacific.

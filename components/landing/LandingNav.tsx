@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
-import { RaiseSEAWordmark } from '@/components/brand/RaiseSEAWordmark'
+import { RaiseSEALogo } from '@/components/brand/RaiseSEALogo'
 
 // Navigation link set. Kept in one place so the desktop bar and the mobile
 // panel can never drift apart — the previous nav hid four links below `sm`
@@ -56,7 +56,7 @@ export function LandingNav({ signedIn }: { signedIn: boolean }) {
           href="/"
           className="inline-flex min-h-[44px] items-center rounded-input"
         >
-          <RaiseSEAWordmark markSize={30} />
+          <RaiseSEALogo variant="primary" height={32} />
         </Link>
 
         {/* Desktop links */}

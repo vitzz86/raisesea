@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="RaiseSEA">
-  <title>RaiseSEA</title>
-  <rect width="64" height="64" rx="14" fill="#1a4d2e"/>
-  <path d="M17 39.5C25.5 27 34.5 22 47 20.5" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
-  <path d="M17 45C27 42.5 36.5 42.5 48 47" stroke="#d8a640" stroke-width="5" stroke-linecap="round"/>
-  <path d="M45.5 20.5L47.5 30.5L38 27.5" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
