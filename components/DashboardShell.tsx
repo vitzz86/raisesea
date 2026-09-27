@@ -22,6 +22,7 @@ import {
   Sparkles, HelpCircle, FileText, BookOpen
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { RaiseSEALogo } from './brand/RaiseSEALogo'
 import { Tour, useTour } from './Tour'
 
 type ShellProps = {
@@ -167,8 +168,8 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
           >
             <Menu className="w-5 h-5" strokeWidth={1.75} />
           </button>
-          <Link href="/" className="text-base font-semibold text-brand tracking-tight">
-            RaiseSEA
+          <Link href="/" aria-label="RaiseSEA home">
+            <RaiseSEALogo variant="onLight" height={20} />
           </Link>
         </div>
         <div className="w-8 h-8 rounded-full bg-brand text-text-inverse flex items-center justify-center text-sm font-semibold">
@@ -186,8 +187,8 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
           />
           <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-surface-card flex flex-col animate-slide-down" style={{ animation: 'slide-down 200ms cubic-bezier(0.0, 0, 0.2, 1)' }}>
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <Link href="/" className="text-base font-semibold text-brand tracking-tight" onClick={() => setDrawerOpen(false)}>
-                RaiseSEA
+              <Link href="/" aria-label="RaiseSEA home" onClick={() => setDrawerOpen(false)}>
+                <RaiseSEALogo variant="onLight" height={20} />
               </Link>
               <button
                 onClick={() => setDrawerOpen(false)}
@@ -267,8 +268,8 @@ function SidebarContent({ activePath, sections, displayName, initial, email, onI
     <>
       {/* Logo header (desktop only — mobile shows it in the drawer header) */}
       <div className="hidden md:flex px-6 py-5 border-b border-border items-center">
-        <Link href="/" className="text-lg font-semibold text-brand tracking-tight">
-          RaiseSEA
+        <Link href="/" aria-label="RaiseSEA home">
+          <RaiseSEALogo variant="onLight" height={22} />
         </Link>
       </div>
 
