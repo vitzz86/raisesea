@@ -99,6 +99,10 @@ export function ScrollReveal({ children, delay = 0, className, slideY = 12 }: Sc
   return (
     <div
       ref={ref}
+      // `data-reveal` lets a <noscript> style block force these wrappers (and
+      // everything inside them) visible. Without JS the IntersectionObserver
+      // never fires, so `opacity-0` would hide most of the page permanently.
+      data-reveal=""
       className={cn(
         'transition-all duration-700 ease-out',
         revealed ? 'opacity-100 translate-y-0' : 'opacity-0',
@@ -128,7 +132,15 @@ interface CountUpProps {
 
 export function CountUp({ end, suffix = '', duration = 1400, className }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null)
-  const [current, setCurrent] = useState(0)
+  // Render the REAL value on first paint, not 0.
+  //
+  // Audit P0: these counters are the first numbers a visitor sees. When the
+  // server render (and every non-JS / pre-intersection frame) shows 0, the
+  // landing page opens on "0+ active investors" / "0/100" — which reads as a
+  // broken product rather than a loading state. Starting at `end` means the
+  // correct number is always the baseline, and the count-up becomes a
+  // progressive enhancement that only runs when it can actually be seen.
+  const [current, setCurrent] = useState(end)
 
   useEffect(() => {
     const el = ref.current
@@ -144,6 +156,8 @@ export function CountUp({ end, suffix = '', duration = 1400, className }: CountU
         for (const entry of entries) {
           if (entry.isIntersecting) {
             const startTime = Date.now()
+            // Only reset to 0 at the moment we begin animating on screen.
+            setCurrent(0)
             const tick = () => {
               const elapsed = Date.now() - startTime
               const progress = Math.min(elapsed / duration, 1)

@@ -98,11 +98,12 @@ export default async function NewsPage({
       <main className="min-h-screen bg-surface-page text-text-primary">
         <NewsSignupPrompt
           signedIn={false}
-          trigger="immediate"
+          trigger="scroll"
+          scrollDepth={0.45}
           storageKey="raisesea_public_news_prompt_seen"
           eyebrow="Weekly digest"
-          title="Try the full RaiseSEA experience."
-          body="Sign in with Google to receive weekly SEA fundraising news, plus deck analysis, mock pitch practice, investor matching, and CRM."
+          title="Get this digest in your inbox every Monday."
+          body="Sign in with Google to receive the weekly SEA fundraising digest, plus deck analysis, pitch practice, investor matching, and CRM."
           ctaLabel="Sign in with Google"
           href="/login?redirectTo=/news"
         />

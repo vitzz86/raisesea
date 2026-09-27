@@ -128,10 +128,10 @@ export function DeckAnalysisMockup() {
       <div className="p-5 space-y-4">
         {/* Top metric row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-          <MockMetric label="Deck score"   value={inView ? <><CountUp end={78} />/100</> : '0/100'} sub="Strong" accent="success" />
+          <MockMetric label="Deck score"   value={<><CountUp end={78} />/100</>} sub="Strong" accent="success" />
           <MockMetric label="Valuation"    value="$8M–$12M" sub="SEA seed" />
-          <MockMetric label="Moat score"   value={inView ? <><CountUp end={7} />/10</> : '0/10'} sub="Solid" />
-          <MockMetric label="Investors"    value={inView ? <><CountUp end={34} suffix=" matches" /></> : '0 matches'} sub="Top: Vertex" />
+          <MockMetric label="Moat score"   value={<><CountUp end={7} />/10</>} sub="Solid" />
+          <MockMetric label="Investors"    value={<><CountUp end={34} suffix=" matches" /></>} sub="Top: Vertex" />
         </div>
 
         {/* Dimension breakdown — bars fill on scroll */}
@@ -211,7 +211,7 @@ export function MockPitchMockup() {
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-xl font-semibold text-text-primary tabular-nums">
-                {inView ? <CountUp end={targetScore} duration={1400} /> : 0}
+                <CountUp end={targetScore} duration={1400} />
               </span>
             </div>
           </div>
@@ -305,7 +305,7 @@ export function InvestorMatchMockup() {
             <div className="text-right shrink-0">
               <div className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">Match</div>
               <div className="text-sm font-semibold text-success-text tabular-nums">
-                {inView ? <CountUp end={inv.score} duration={900} /> : 0}
+                <CountUp end={inv.score} duration={900} />
               </div>
             </div>
           </div>
@@ -352,7 +352,7 @@ export function CrmMockup() {
             >
               <div className="text-[9px] font-semibold uppercase tracking-wider text-text-tertiary">{s.name}</div>
               <div className="text-lg font-semibold text-text-primary mt-1 tabular-nums">
-                {inView ? <CountUp end={s.count} duration={800} /> : 0}
+                <CountUp end={s.count} duration={800} />
               </div>
             </div>
           ))}
