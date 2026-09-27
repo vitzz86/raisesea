@@ -22,12 +22,20 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions, className }: PageHeaderProps) {
   return (
-    <header className={cn('flex items-start justify-between gap-4 flex-wrap mb-6', className)}>
-      <div className="flex-1 min-w-0">
-        <h1 className="text-xl font-semibold text-text-primary tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-text-tertiary mt-1">{subtitle}</p>}
+    <header className={cn('mb-6', className)}>
+      <div className="flex items-start justify-between gap-4 flex-wrap pb-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-semibold text-text-primary tracking-tight">{title}</h1>
+          {subtitle && <p className="text-sm text-text-tertiary mt-1">{subtitle}</p>}
+        </div>
+        {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
       </div>
-      {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
+      {/* Hairline that fades at both ends — the landing page's divider-fade,
+          giving every app page the same quiet rule instead of a hard border.
+          Deliberately NOT a gradient-filled title: `text-gradient-brand` makes
+          the text colour transparent via background-clip, and the page title
+          is the one string that must never risk rendering invisible. */}
+      <div className="divider-fade" />
     </header>
   )
 }
