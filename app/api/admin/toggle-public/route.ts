@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isLegacyAdmin } from '@/lib/admin-auth'
 
 export async function POST(req: NextRequest) {
-  const cookie = req.cookies.get('admin_auth')
-  if (cookie?.value !== process.env.ADMIN_PASSWORD) {
+  // Shared fail-closed gate. This endpoint WRITES submissions.is_public,
+  // so the previous inline comparison was a latent auth bypass with teeth.
+  if (!isLegacyAdmin(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
