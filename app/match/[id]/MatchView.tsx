@@ -1,8 +1,7 @@
-// app/match/[id]/page.tsx
+// app/match/[id]/MatchView.tsx
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
-import { createClient } from '@supabase/supabase-js'
 import { Target, Users } from 'lucide-react'
 import { NextActionsBlock, Card } from '@/components/ui'
 import { deckAnalysisNextActions } from '@/lib/next-actions'
@@ -11,11 +10,6 @@ import DeckScoreTab    from '@/components/results/DeckScoreTab'
 import MarketTab       from '@/components/results/MarketTab'
 import CompetitorsTab  from '@/components/results/CompetitorsTab'
 import InvestorsTab    from '@/components/results/InvestorsTab'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 const TABS = [
   { id: 'overview',     label: 'Overview',     icon: '◈' },
@@ -28,55 +22,35 @@ const TABS = [
 type TabId = typeof TABS[number]['id']
 
 type MatchViewProps = {
+  /** Full submission row, loaded and authorised SERVER-side in page.tsx. */
+  submission: Record<string, unknown>
   isOwner: boolean   // true if the signed-in user owns this submission
   canUseExpertFeatures: boolean
 }
 
-export default function MatchView({ isOwner, canUseExpertFeatures }: MatchViewProps) {
+export default function MatchView({ submission, isOwner, canUseExpertFeatures }: MatchViewProps) {
   const params    = useParams()
-  const slug      = params?.id as string
-  const [sub, setSub]         = useState<Record<string, unknown> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [shareStatus, setShareStatus] = useState<'' | 'copied' | 'shared'>('')
 
-  useEffect(() => {
-    if (!slug) return
-    fetchSubmission()
-  }, [slug])
-
-  async function fetchSubmission() {
-    try {
-      const { data, error } = await supabase
-        .from('submissions')
-        .select('*')
-        .eq('unique_slug', slug)
-        .single()
-
-      if (error) throw error
-      if (!data)  throw new Error('Submission not found')
-
-      // Parse JSON columns
-      const parsed = {
-        ...data,
-        match_results:        safeJSON(data.match_results),
-        warm_intros:          safeJSON(data.warm_intros),
-        deck_analysis:        safeJSON(data.deck_analysis),
-        market_analysis:      safeJSON(data.market_analysis),
-        competitive_analysis: safeJSON(data.competitive_analysis),
-        sector_profile:       safeJSON(data.sector_profile),
-      }
-      setSub(parsed)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load results')
-    } finally {
-      setLoading(false)
-    }
+  // The row arrives as a server-rendered prop: this component no longer reads
+  // the database at all.
+  //
+  // It previously queried `submissions` directly with the PUBLIC anon key —
+  // `.select('*').eq('unique_slug', slug)` — which meant anyone holding or
+  // guessing a slug could read every column of that submission, including
+  // founder_email, straight from the REST API. `page.tsx` had already loaded
+  // the row and enforced the owner/is_public/super-admin gate, so the client
+  // query was redundant as well as unsafe.
+  const sub: Record<string, unknown> = {
+    ...submission,
+    match_results:        safeJSON(submission.match_results),
+    warm_intros:          safeJSON(submission.warm_intros),
+    deck_analysis:        safeJSON(submission.deck_analysis),
+    market_analysis:      safeJSON(submission.market_analysis),
+    competitive_analysis: safeJSON(submission.competitive_analysis),
+    sector_profile:       safeJSON(submission.sector_profile),
   }
-
-  if (loading) return <LoadingScreen />
-  if (error || !sub) return <ErrorScreen error={error} />
 
   const matchResults       = (sub.match_results as Record<string, unknown>[]) || []
   const deckAnalysis       = sub.deck_analysis  as Record<string, unknown> | null
@@ -296,28 +270,4 @@ function safeJSON(val: unknown): unknown {
   if (!val) return null
   if (typeof val === 'object') return val
   try { return JSON.parse(val as string) } catch { return null }
-}
-
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-[#1a4d2e] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-500 text-sm">Generating your investor intelligence report…</p>
-        <p className="text-gray-400 text-xs mt-1">AI analysis takes 30-60 seconds</p>
-      </div>
-    </div>
-  )
-}
-
-function ErrorScreen({ error }: { error: string | null }) {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center max-w-md">
-        <p className="text-red-500 font-medium mb-2">Unable to load results</p>
-        <p className="text-gray-400 text-sm">{error || 'Please check the URL and try again'}</p>
-        <a href="/" className="mt-4 inline-block text-[#1a4d2e] text-sm underline">← Back to home</a>
-      </div>
-    </div>
-  )
 }

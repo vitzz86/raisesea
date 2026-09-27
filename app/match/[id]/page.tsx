@@ -6,6 +6,7 @@ import { isApprovedExpert } from '@/lib/expert-status'
 import TopBar from '@/components/TopBar'
 import DashboardShell from '@/components/DashboardShell'
 import MatchView from './MatchView'
+import { toSharedReport } from '@/lib/shared-report'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,10 +18,13 @@ export default async function MatchPage({
   const { id: slug } = await params
   const user = await getSessionUser()
 
-  // Load minimal row to check ownership + privacy
+  // Load the FULL row server-side. This is now the single read path for the
+  // report: the client component no longer queries the database, so
+  // `submissions` no longer needs any anonymous read access (see
+  // supabase/migrations/v26_submissions_anon_lockdown.sql).
   const { data: row } = await supabaseAdmin
     .from('submissions')
-    .select('user_id, is_public')
+    .select('*')
     .eq('unique_slug', slug)
     .maybeSingle()
 
@@ -29,10 +33,18 @@ export default async function MatchPage({
   const isOwner = !!(user && row.user_id === user.id)
   const admin   = user ? await isSuperAdmin(user) : false
 
-  // Privacy: if not public, only owner + super admin can view
-  if (row.is_public === false && !isOwner && !admin) {
+  // Privacy: fail CLOSED. Anything not explicitly public is visible only to its
+  // owner and to super admins.
+  // This previously read `row.is_public === false`, so a NULL is_public fell
+  // through and was treated as PUBLIC here — while the admin table renders a
+  // NULL is_public as "private". The two surfaces disagreed; this makes the
+  // page match the label.
+  if (!row.is_public && !isOwner && !admin) {
     notFound()
   }
+
+  // Only report fields cross the server/client boundary, including for owners.
+  const submission = toSharedReport(row)
 
   // ── Signed-in viewer: wrap in the full DashboardShell so they have
   //    nav back to the rest of the app. Fixes the "deck analysis has
@@ -44,7 +56,7 @@ export default async function MatchPage({
     const isExpert = await isApprovedExpert(user.id)
     return (
       <DashboardShell user={user} profile={profile} isAdmin={admin} isApprovedExpert={isExpert} activePath="dashboard">
-        <MatchView isOwner={isOwner} canUseExpertFeatures={admin} />
+        <MatchView submission={submission} isOwner={isOwner} canUseExpertFeatures={admin} />
       </DashboardShell>
     )
   }
@@ -54,7 +66,7 @@ export default async function MatchPage({
     <>
       <TopBar />
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
-        <MatchView isOwner={isOwner} canUseExpertFeatures={false} />
+        <MatchView submission={submission} isOwner={isOwner} canUseExpertFeatures={false} />
       </div>
     </>
   )

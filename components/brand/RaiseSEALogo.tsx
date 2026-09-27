@@ -29,9 +29,20 @@
 // The opaque plate is kept available as `full` for large contexts rather
 // than deleted.
 //
-// There is no approved light-background variant (manifest light: null), so
-// the light navigation gives the lockup a compatible dark band instead of
-// inverting or recolouring it.
+//   logo-light.png    320x53, TRANSPARENT, DARK wordmark + deepened mark —
+//                     the approved light-background variant (manifest
+//                     light: "assets/brand/logo-light.png"). Derived from
+//                     logo-footer.png with geometry untouched: only the
+//                     per-pixel ink changed and the alpha channel is bitwise
+//                     identical, verified after generation. The footer asset
+//                     measures 2.17:1 on white for the mark's darker tone,
+//                     1.48:1 for its lighter tone and 1.05:1 for its white
+//                     wordmark — i.e. effectively invisible — which is why
+//                     light surfaces previously needed a dark band. The
+//                     light variant measures 9.79:1, 5.24:1 and 14.72:1.
+//
+// Light surfaces therefore use logo-light.png directly, no band required.
+// Dark surfaces keep using the footer lockup on a dark band.
 //
 // An earlier revision of the landing page shipped a hand-drawn SVG mark
 // (a rising arrow with a gold wave) taken from an unused repo file. That
@@ -42,6 +53,9 @@ const VARIANTS = {
   // Transparent, white wordmark. Content fills 81% of the file height.
   // For use on dark green.
   onDark: { src: '/brand/raisesea-logo-footer.png', w: 320, h: 53 },
+  // Transparent, dark wordmark + deepened mark. Same 81% content fill.
+  // For light surfaces — no band required.
+  onLight: { src: '/brand/raisesea-logo-light.png', w: 320, h: 53 },
   // Opaque plate with generous internal padding — content fills only 44%
   // of the file height. Legible at ~45px and above; not for navigation.
   full: { src: '/brand/raisesea-logo-primary.png', w: 800, h: 175 },

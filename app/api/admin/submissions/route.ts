@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isLegacyAdmin } from '@/lib/admin-auth'
 
 export async function GET(req: NextRequest) {
-  const cookie = req.cookies.get('admin_auth')
-  if (cookie?.value !== process.env.ADMIN_PASSWORD) {
+  // Shared fail-closed gate — see lib/admin-auth.ts for why this is not
+  // an inline `cookie?.value !== process.env.ADMIN_PASSWORD` comparison.
+  if (!isLegacyAdmin(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

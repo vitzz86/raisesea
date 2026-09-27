@@ -22,6 +22,7 @@ import {
   Sparkles, HelpCircle, FileText, BookOpen
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { RaiseSEALogo } from './brand/RaiseSEALogo'
 import { Tour, useTour } from './Tour'
 
 type ShellProps = {
@@ -143,10 +144,10 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
   const mobileBottomNav = isAdmin ? MOBILE_BOTTOM_NAV : MOBILE_BOTTOM_NAV_NO_EXPERTS
 
   return (
-    <div className="min-h-screen bg-surface-page">
+    <div className="min-h-screen app-canvas">
 
       {/* ─── DESKTOP SIDEBAR (≥md) — FIXED so always visible regardless of scroll ─── */}
-      <aside className="hidden md:flex w-[248px] bg-surface-card border-r border-border flex-col fixed top-0 left-0 h-screen z-30">
+      <aside className="hidden md:flex w-[248px] app-chrome app-rule-right flex-col fixed top-0 left-0 h-screen z-30">
         <SidebarContent
           activePath={activePath}
           sections={sections}
@@ -158,7 +159,7 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
       </aside>
 
       {/* ─── MOBILE TOP BAR (<md) ────────────────────────────────── */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-40 bg-surface-card border-b border-border h-14 flex items-center justify-between px-4">
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 app-chrome app-rule-bottom h-14 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setDrawerOpen(true)}
@@ -167,8 +168,8 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
           >
             <Menu className="w-5 h-5" strokeWidth={1.75} />
           </button>
-          <Link href="/" className="text-base font-semibold text-brand tracking-tight">
-            RaiseSEA
+          <Link href="/" aria-label="RaiseSEA home">
+            <RaiseSEALogo variant="onLight" height={20} />
           </Link>
         </div>
         <div className="w-8 h-8 rounded-full bg-brand text-text-inverse flex items-center justify-center text-sm font-semibold">
@@ -184,10 +185,10 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
             onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
-          <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-surface-card flex flex-col animate-slide-down" style={{ animation: 'slide-down 200ms cubic-bezier(0.0, 0, 0.2, 1)' }}>
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <Link href="/" className="text-base font-semibold text-brand tracking-tight" onClick={() => setDrawerOpen(false)}>
-                RaiseSEA
+          <aside className="md:hidden fixed inset-y-0 left-0 z-50 w-[280px] app-chrome flex flex-col animate-slide-down" style={{ animation: 'slide-down 200ms cubic-bezier(0.0, 0, 0.2, 1)' }}>
+            <div className="flex items-center justify-between p-4 app-rule-bottom">
+              <Link href="/" aria-label="RaiseSEA home" onClick={() => setDrawerOpen(false)}>
+                <RaiseSEALogo variant="onLight" height={20} />
               </Link>
               <button
                 onClick={() => setDrawerOpen(false)}
@@ -219,7 +220,7 @@ export default function DashboardShell({ user, profile, isAdmin, isApprovedExper
       </main>
 
       {/* ─── MOBILE BOTTOM NAV (<md) ────────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-card border-t border-border flex items-stretch h-16">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 app-chrome app-rule-top flex items-stretch h-16">
         {mobileBottomNav.map(item => {
           const active = activePath === item.key
           return (
@@ -266,9 +267,9 @@ function SidebarContent({ activePath, sections, displayName, initial, email, onI
   return (
     <>
       {/* Logo header (desktop only — mobile shows it in the drawer header) */}
-      <div className="hidden md:flex px-6 py-5 border-b border-border items-center">
-        <Link href="/" className="text-lg font-semibold text-brand tracking-tight">
-          RaiseSEA
+      <div className="hidden md:flex px-6 py-5 app-rule-bottom items-center">
+        <Link href="/" aria-label="RaiseSEA home">
+          <RaiseSEALogo variant="onLight" height={22} />
         </Link>
       </div>
 
@@ -303,7 +304,7 @@ function SidebarContent({ activePath, sections, displayName, initial, email, onI
       </nav>
 
       {/* User card at bottom — clickable, links to /settings */}
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 app-rule-top">
         <Link
           href="/settings"
           onClick={onItemClick}
@@ -363,8 +364,8 @@ function NavLink({ item, active, onClick, isAdmin }: NavLinkProps) {
         'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all',
         active
           ? isAdmin
-            ? 'bg-warning-solid text-text-inverse font-semibold shadow-subtle'
-            : 'bg-brand text-text-inverse font-semibold shadow-subtle'
+            ? 'nav-active-warning text-text-inverse font-semibold'
+            : 'nav-active text-text-inverse font-semibold'
           : isAdmin
             ? 'text-warning-text hover:bg-warning-bg'
             : 'text-text-secondary hover:bg-surface-muted hover:text-text-primary'

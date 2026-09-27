@@ -181,7 +181,16 @@ export async function POST(req: NextRequest) {
     const serverDeckSha256 = createHash('sha256').update(deckResult.buffer).digest('hex')
     const deckSha256 = serverDeckSha256 || clientDeckSha256
 
-    if (sessionUser && !bypassFreeLimits && deckSha256) {
+    // Duplicate-deck detection is DATA INTEGRITY, not a usage limit, so it must
+    // not sit behind !bypassFreeLimits. It previously required
+    // `!bypassFreeLimits`, so super admins — who deliberately bypass limits —
+    // and any flow without a session were never checked. That is how production
+    // accumulated four nemu.ai rows and three each of TOMAZZ BIZNIZ and
+    // CURAWEDA PALAGAN INNOTECH (including case-variant pairs).
+    //
+    // deckSha256 is always computed server-side from the stored bytes above, so
+    // this check has a hash for every submission that reaches it.
+    if (sessionUser && deckSha256) {
       const { existing, columnAvailable } = await findExistingDeckAnalysis(sessionUser.id, deckSha256)
       deckHashColumnAvailable = columnAvailable
       if (existing) {
@@ -229,6 +238,11 @@ export async function POST(req: NextRequest) {
     // Pass canonicalized form stage/sector as overrides — these win over Gemini's
     // interpretation of the deck (founder knows their own stage).
     let fullAnalysis
+    // Why the analysis produced nothing. Previously the caught error was logged
+    // to the console and then discarded, so every failed submission was written
+    // with analysis_error = NULL — leaving no way to tell a rate limit from a
+    // corrupt deck or an upstream outage.
+    let analysisError: string | null = null
     try {
       const topInvestorNames = investorList.slice(0, 100).map(i => i.name)
       fullAnalysis = await runFullAnalysis(
@@ -240,6 +254,7 @@ export async function POST(req: NextRequest) {
       )
     } catch (err) {
       console.error('Gemini analysis failed:', err)
+      analysisError = err instanceof Error ? err.message : String(err)
       // Continue with degraded mode — save what we have
       fullAnalysis = null
     }
@@ -355,6 +370,10 @@ export async function POST(req: NextRequest) {
       market_analysis:        fullAnalysis?.market_analysis ? JSON.stringify(fullAnalysis.market_analysis) : null,
       competitive_analysis:   fullAnalysis?.competitive_analysis ? JSON.stringify(fullAnalysis.competitive_analysis) : null,
       analysis_status:        fullAnalysis ? 'complete' : 'failed',
+      // Persist WHY it failed; null on success so the column stays meaningful.
+      analysis_error:         fullAnalysis
+        ? null
+        : (analysisError || 'Analysis completed without producing a result'),
       status:                 'matched',
     }
 
