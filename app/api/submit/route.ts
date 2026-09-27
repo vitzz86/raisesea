@@ -181,7 +181,16 @@ export async function POST(req: NextRequest) {
     const serverDeckSha256 = createHash('sha256').update(deckResult.buffer).digest('hex')
     const deckSha256 = serverDeckSha256 || clientDeckSha256
 
-    if (sessionUser && !bypassFreeLimits && deckSha256) {
+    // Duplicate-deck detection is DATA INTEGRITY, not a usage limit, so it must
+    // not sit behind !bypassFreeLimits. It previously required
+    // `!bypassFreeLimits`, so super admins — who deliberately bypass limits —
+    // and any flow without a session were never checked. That is how production
+    // accumulated four nemu.ai rows and three each of TOMAZZ BIZNIZ and
+    // CURAWEDA PALAGAN INNOTECH (including case-variant pairs).
+    //
+    // deckSha256 is always computed server-side from the stored bytes above, so
+    // this check has a hash for every submission that reaches it.
+    if (sessionUser && deckSha256) {
       const { existing, columnAvailable } = await findExistingDeckAnalysis(sessionUser.id, deckSha256)
       deckHashColumnAvailable = columnAvailable
       if (existing) {
