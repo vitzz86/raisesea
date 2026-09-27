@@ -21,7 +21,10 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const variantClasses: Record<Variant, string> = {
-  default: 'bg-surface-card border border-border shadow-subtle',
+  // `surface-sheen` (globals.css) gives cards the landing page's top-down
+  // light instead of flat white, so stacked cards read as lit surfaces
+  // rather than paper cut-outs.
+  default: 'surface-sheen border border-border shadow-subtle',
   muted:   'bg-surface-muted border border-border-muted',
   subtle:  'bg-transparent border border-border-muted',
 }
@@ -47,7 +50,7 @@ export function Card({
         'rounded-lg transition-all',
         variantClasses[variant],
         paddingClasses[padding],
-        interactive && 'cursor-pointer hover:border-border-strong hover:shadow-hover',
+        interactive && 'cursor-pointer card-hover hover:border-border-strong',
         className
       )}
       {...rest}

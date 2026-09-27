@@ -322,3 +322,53 @@ input:focus, textarea:focus, select:focus {
     border-color: #c3d3c8;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   App surface — premium treatments
+   The same visual language as the marketing surface above, dialled down
+   for a working UI. Product pages carry dense data, so the light source
+   and the motion stay well below hero intensity — at hero levels the
+   glow fights the content instead of framing it.
+
+   Why this block exists: every authenticated page previously sat on a
+   flat --surface-page with flat bordered cards and consumed none of the
+   premium utilities, which is precisely why the product read as
+   utilitarian next to the landing page. These classes give the app the
+   landing page's light direction (top-down sheen, ambient brand glow,
+   hairline rules) without touching page-level layouts.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Page canvas — the hero glow at ~45% intensity, anchored above the top
+   edge so it reads as ambient light in the room rather than a spotlight. */
+.app-canvas {
+  background:
+    radial-gradient(58% 30% at 50% -4%, rgba(45, 122, 78, 0.070) 0%, rgba(244, 247, 245, 0) 72%),
+    radial-gradient(26% 22% at 88% 0%,   rgba(26, 77, 46, 0.045) 0%, rgba(244, 247, 245, 0) 70%),
+    var(--surface-page);
+}
+
+/* Active nav pill — a real gradient with an inset top highlight, so it
+   reads as a raised lit surface rather than a flat colour fill. */
+.nav-active {
+  background-image: linear-gradient(180deg, #1f5c37 0%, #1a4d2e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 1px 2px rgba(13, 31, 20, 0.16);
+}
+.nav-active-warning {
+  background-image: linear-gradient(180deg, #e08a1e 0%, #d97706 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 1px 2px rgba(13, 31, 20, 0.16);
+}
+
+/* Chrome (sidebar, mobile top/bottom bars) — hairline rules rather than
+   full-strength borders, and the same top-down sheen as cards so chrome
+   and content share one light direction. */
+.app-chrome {
+  background-color: #ffffff;
+  background-image: linear-gradient(180deg, #ffffff 0%, #f9fcfa 100%);
+}
+.app-rule-right  { border-right:  1px solid var(--border-muted); }
+.app-rule-bottom { border-bottom: 1px solid var(--border-muted); }
+.app-rule-top    { border-top:    1px solid var(--border-muted); }

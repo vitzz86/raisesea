@@ -23,7 +23,7 @@ interface StatCardProps {
 
 export function StatCard({ label, value, unit, icon, delta, description, className }: StatCardProps) {
   return (
-    <div className={cn('bg-surface-card border border-border rounded-lg p-6 transition-colors hover:border-border-strong', className)}>
+    <div className={cn('surface-sheen border border-border rounded-lg p-6 card-hover hover:border-border-strong', className)}>
       <div className="flex items-center gap-2 mb-3">
         {icon && <span className="text-text-tertiary">{icon}</span>}
         <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide">
@@ -31,7 +31,7 @@ export function StatCard({ label, value, unit, icon, delta, description, classNa
         </span>
       </div>
       <div className="flex items-baseline gap-2 mb-2">
-        <span className="text-2xl font-semibold text-text-primary tracking-tight leading-none">
+        <span className="text-2xl font-semibold text-text-primary tracking-tight leading-none tabular-nums">
           {value}
         </span>
         {unit && <span className="text-base text-text-tertiary">{unit}</span>}
