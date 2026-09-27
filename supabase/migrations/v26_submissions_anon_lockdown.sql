@@ -48,10 +48,11 @@ DROP POLICY IF EXISTS "Public can view by slug"      ON public.submissions;
 DROP POLICY IF EXISTS "Public can view if is_public" ON public.submissions;
 DROP POLICY IF EXISTS "Public can view if public"    ON public.submissions;
 DROP POLICY IF EXISTS "Anyone can view public"       ON public.submissions;
+DROP POLICY IF EXISTS "Public read submissions"      ON public.submissions;
 
 -- Belt and braces: even if some future policy is created FOR SELECT TO anon,
 -- the role cannot read the table without the privilege.
-REVOKE SELECT ON public.submissions FROM anon;
+REVOKE SELECT ON public.submissions FROM PUBLIC, anon;
 
 -- NOTE: this deliberately leaves the grants of `authenticated` and the owner
 -- policy untouched. If a public-read path is ever needed again, add an explicit

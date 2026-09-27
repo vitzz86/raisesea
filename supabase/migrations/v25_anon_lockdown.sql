@@ -57,6 +57,11 @@
 -- anon/authenticated, those roles read zero rows.
 ALTER TABLE public.investors ENABLE ROW LEVEL SECURITY;
 
+-- Production preflight found this legacy policy; enabling RLS alone would
+-- leave visible investor contact records publicly readable.
+DROP POLICY IF EXISTS "Public read investors" ON public.investors;
+REVOKE SELECT ON public.investors FROM PUBLIC, anon, authenticated;
+
 -- Service role keeps full access. (BYPASSRLS makes this policy partly
 -- belt-and-braces, but it documents intent and survives a future role change.)
 -- Matches the pattern already used on submissions / vc_profiles.

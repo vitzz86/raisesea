@@ -42,7 +42,7 @@ export default function MatchView({ submission, isOwner, canUseExpertFeatures }:
   // founder_email, straight from the REST API. `page.tsx` had already loaded
   // the row and enforced the owner/is_public/super-admin gate, so the client
   // query was redundant as well as unsafe.
-  const sub = {
+  const sub: Record<string, unknown> = {
     ...submission,
     match_results:        safeJSON(submission.match_results),
     warm_intros:          safeJSON(submission.warm_intros),

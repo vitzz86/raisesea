@@ -6,6 +6,7 @@ import { isApprovedExpert } from '@/lib/expert-status'
 import TopBar from '@/components/TopBar'
 import DashboardShell from '@/components/DashboardShell'
 import MatchView from './MatchView'
+import { toSharedReport } from '@/lib/shared-report'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,11 +43,8 @@ export default async function MatchPage({
     notFound()
   }
 
-  // Strip founder PII before the row crosses to the client. The report UI never
-  // renders these; admin and /meet/preview read them through their own
-  // service-role queries, where authorization has already been established.
-  const submission = { ...(row as Record<string, unknown>) }
-  delete submission.founder_email
+  // Only report fields cross the server/client boundary, including for owners.
+  const submission = toSharedReport(row)
 
   // ── Signed-in viewer: wrap in the full DashboardShell so they have
   //    nav back to the rest of the app. Fixes the "deck analysis has
