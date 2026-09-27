@@ -25,6 +25,7 @@ import {
   Radar, Lock, Trash2, ServerCog, ShieldCheck, Sparkles, Globe2,
 } from 'lucide-react'
 import { ScrollReveal } from '@/components/landing/ScrollReveal'
+import { RaiseSEAWordmark } from '@/components/brand/RaiseSEAWordmark'
 
 // ─── Shared: section eyebrow + heading ────────────────────────────
 
@@ -842,7 +843,9 @@ export function SiteFooter() {
       <div className="max-w-6xl mx-auto px-6 py-12">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
-            <Link href="/" className="inline-flex min-h-[44px] items-center text-base font-semibold text-brand tracking-tight">RaiseSEA</Link>
+            <Link href="/" className="inline-flex min-h-[44px] items-center rounded-input">
+              <RaiseSEAWordmark markSize={34} withTagline />
+            </Link>
             <p className="text-sm text-text-tertiary mt-3 leading-relaxed max-w-xs">
               Fundraising intelligence and execution for founders across Asia Pacific.
             </p>

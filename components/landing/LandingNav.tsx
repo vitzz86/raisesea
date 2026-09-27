@@ -3,16 +3,22 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
+import { RaiseSEAWordmark } from '@/components/brand/RaiseSEAWordmark'
 
 // Navigation link set. Kept in one place so the desktop bar and the mobile
 // panel can never drift apart — the previous nav hid four links below `sm`
-// with no menu, so on a phone nobody could reach Features/Why SEA/News/FAQ.
+// with no menu, so on a phone nobody could reach them at all.
+//
+// There is deliberately no "News" entry. The APAC Intelligence section below
+// already renders live news previews from the same feed and links on to
+// /news, so a second top-level link to the same destination was duplicating
+// a nav slot. /news itself is untouched and still reachable from the footer,
+// the dashboard, and the weekly digest.
 const PRIMARY_LINKS = [
   { label: 'Product',               href: '#journey' },
   { label: 'Investor Intelligence', href: '#investors' },
   { label: 'APAC Intelligence',     href: '#intelligence' },
   { label: 'For Programs',          href: '#programs' },
-  { label: 'News',                  href: '/news' },
   { label: 'FAQ',                   href: '#faq' },
 ]
 
@@ -48,9 +54,9 @@ export function LandingNav({ signedIn }: { signedIn: boolean }) {
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
         <Link
           href="/"
-          className="inline-flex min-h-[44px] items-center rounded-input px-1 text-lg font-semibold text-brand tracking-tight"
+          className="inline-flex min-h-[44px] items-center rounded-input"
         >
-          RaiseSEA
+          <RaiseSEAWordmark markSize={30} />
         </Link>
 
         {/* Desktop links */}
