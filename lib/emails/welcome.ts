@@ -61,7 +61,7 @@ ${BASE_URL}/glossary
 </p>
 
 <div style="margin-top:20px;padding-top:20px;border-top:1px solid #e3eae5;">
-  <p style="margin:0;font-size:12px;line-height:1.6;color:#6b7d6e;">
+  <p style="margin:0;font-size:12px;line-height:1.6;color:#55665a;">
     <strong style="color:#0d1f14;">P.S.</strong> If you don't know what a SAFE, TAM, or burn rate is — we built a glossary in plain English.
     <a href="${BASE_URL}/glossary" style="color:#1a4d2e;text-decoration:underline;">${BASE_URL}/glossary</a>
   </p>

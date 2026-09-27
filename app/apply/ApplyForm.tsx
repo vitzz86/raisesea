@@ -220,7 +220,7 @@ export default function ApplyForm({ prefill, usage }: ApplyFormProps) {
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         :root{
           --brand:#1a4d2e;--brand-mid:#2d7a4e;--brand-light:#E8F5E9;--brand-pale:#f0faf2;
-          --ink:#0d1f14;--ink-mid:#3d5045;--ink-light:#6b7d6e;
+          --ink:#0d1f14;--ink-mid:#3d5045;--ink-light:#55665a;
           --border:#d6e4d9;--border-input:#8a9d8f;--bg:#fafcfa;--white:#fff;--red:#dc2626;
           --font-display:'DM Serif Display',Georgia,serif;
           --font-body:'DM Sans',system-ui,sans-serif;

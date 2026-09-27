@@ -31,7 +31,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {/* Scroll-reveal wrappers start at opacity-0 and are revealed by an
+            IntersectionObserver. With JS disabled that observer never runs, so
+            force every revealed region visible instead of shipping a blank page. */}
+        <noscript>
+          <style>{`[data-reveal],[data-reveal] *{opacity:1 !important;transform:none !important}`}</style>
+        </noscript>
+        {children}
+      </body>
     </html>
   )
 }

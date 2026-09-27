@@ -23,7 +23,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   FileText, Sparkles, BarChart3, Target, Mic, Building2, CheckCircle2,
-  Calendar, Filter, Search, MessageSquare
+  Calendar, Filter, Search, MessageSquare, Play, Pause
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
@@ -48,8 +48,15 @@ const phaseCaptions: Record<PhaseKey, string> = {
 export function HeroCinematic() {
   const [phaseIdx, setPhaseIdx] = useState(0)
   const [reducedMotion, setReducedMotion] = useState(false)
-  const [paused, setPaused] = useState(false)
+  const [tabHidden, setTabHidden] = useState(false)
+  // Visitor-controlled pause. This loop carries real product information
+  // (five screens a visitor is meant to read), so it must be stoppable —
+  // WCAG 2.2.2 "Pause, Stop, Hide". Previously `paused` only mirrored
+  // document.hidden, so nobody could actually stop the motion.
+  const [userPaused, setUserPaused] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const paused = tabHidden || userPaused
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -60,7 +67,7 @@ export function HeroCinematic() {
 
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const onVisibility = () => setPaused(document.hidden)
+    const onVisibility = () => setTabHidden(document.hidden)
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
@@ -77,35 +84,66 @@ export function HeroCinematic() {
   const currentKey = PHASES[phaseIdx].key
 
   return (
-    <div className="bg-surface-card border border-border rounded-2xl shadow-elevated overflow-hidden">
+    <div className="bg-surface-card border border-border rounded-2xl shadow-lift overflow-hidden ring-1 ring-brand/[0.07]">
       {/* App chrome — looks like our real DashboardShell */}
       <div className="bg-surface-muted border-b border-border-muted px-4 py-2.5 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-border-strong" />
         <span className="w-2 h-2 rounded-full bg-border-strong" />
         <span className="w-2 h-2 rounded-full bg-border-strong" />
-        <span className="ml-3 text-[11px] text-text-tertiary font-medium truncate">
+        <span className="ml-3 hidden min-w-0 text-xs text-text-tertiary font-medium truncate sm:inline">
           raisesea.com · {PHASES[phaseIdx].label}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
+
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {/* Step control.
+              The visual bars stay small — that's the design. But each one is
+              now a real 44px-tall tap target instead of the previous 6×4px
+              sliver. The negative vertical margin keeps the chrome bar at its
+              intended height while the hit area stays legally sized. */}
           {PHASES.map((p, i) => (
             <button
               key={p.key}
               type="button"
               onClick={() => setPhaseIdx(i)}
-              aria-label={`Jump to ${p.label} phase`}
-              className={cn(
-                'h-1 rounded-full transition-all duration-500',
-                i === phaseIdx
-                  ? 'w-5 bg-brand'
-                  : 'w-1.5 bg-border-strong hover:bg-text-tertiary'
-              )}
-            />
+              aria-label={`Show the ${p.label} step`}
+              aria-current={i === phaseIdx ? 'step' : undefined}
+              className="group/step -my-3 flex h-11 w-11 items-center justify-center"
+            >
+              <span
+                className={cn(
+                  'h-1 rounded-full transition-all duration-500',
+                  i === phaseIdx
+                    ? 'w-5 bg-brand'
+                    : 'w-3 bg-border-strong group-hover/step:bg-text-tertiary'
+                )}
+              />
+            </button>
           ))}
+
+          {/* Explicit play/pause — WCAG 2.2.2. Hidden when the visitor has
+              asked for reduced motion, because then nothing is playing. */}
+          {!reducedMotion && (
+            <button
+              type="button"
+              onClick={() => setUserPaused(v => !v)}
+              aria-label={userPaused ? 'Play the product walkthrough' : 'Pause the product walkthrough'}
+              className="ml-1 -my-3 flex h-11 w-11 items-center justify-center rounded-input text-text-secondary hover:text-text-primary"
+            >
+              {userPaused
+                ? <Play className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+                : <Pause className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Stage — taller to accommodate denser, more accurate layouts */}
-      <div className="relative h-[480px] md:h-[520px] overflow-hidden bg-surface-page">
+      {/* Stage — taller to accommodate denser, more accurate layouts.
+          `inert` + aria-hidden: the phase panels are illustrations of the real
+          product and contain real <button> elements ("Submit for analysis",
+          "Filter"...) purely for visual fidelity. They are not controls. The
+          chrome bar above is deliberately OUTSIDE this wrapper so the genuine
+          step and play/pause controls stay focusable. */}
+      <div inert aria-hidden="true" className="relative h-[480px] md:h-[520px] overflow-hidden bg-surface-page">
         <PhaseLayer active={currentKey === 'upload'}>   <UploadPhase   active={currentKey === 'upload'}   /> </PhaseLayer>
         <PhaseLayer active={currentKey === 'analyze'}>  <AnalyzePhase  active={currentKey === 'analyze'}  /> </PhaseLayer>
         <PhaseLayer active={currentKey === 'result'}>   <ResultPhase   active={currentKey === 'result'}   /> </PhaseLayer>
@@ -114,13 +152,13 @@ export function HeroCinematic() {
       </div>
 
       {/* Caption + status */}
-      <div className="bg-surface-muted/60 border-t border-border-muted px-5 py-3 flex items-center justify-between">
-        <div className="text-[11px] text-text-secondary">
+      <div className="bg-surface-muted/60 border-t border-border-muted px-5 py-3 flex items-center justify-between gap-4">
+        <div className="text-xs text-text-secondary">
           <span className="font-semibold text-text-primary">{PHASES[phaseIdx].label}.</span>{' '}
           {phaseCaptions[currentKey]}
         </div>
         {!reducedMotion && (
-          <div className="flex items-center gap-1.5 text-[10px] text-text-tertiary">
+          <div className="flex items-center gap-1.5 text-xs text-text-tertiary shrink-0">
             <span className={cn('w-1.5 h-1.5 rounded-full', paused ? 'bg-text-disabled' : 'bg-success-solid animate-pulse')} />
             {paused ? 'Paused' : 'Auto-play'}
           </div>

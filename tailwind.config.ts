@@ -36,6 +36,12 @@ const config: Config = {
       '3xl':  ['28px', { lineHeight: '36px',  letterSpacing: '-0.022em' }],
       '4xl':  ['40px', { lineHeight: '48px',  letterSpacing: '-0.028em' }],
       '5xl':  ['40px', { lineHeight: '48px',  letterSpacing: '-0.028em' }],
+      // Display sizes for the landing hero. These were MISSING: overriding
+      // theme.fontSize replaces Tailwind's defaults, so `md:text-6xl` on the
+      // hero was an unknown class that Tailwind silently never emitted — the
+      // headline has been rendering at the text-4xl fallback (40px) all along.
+      '6xl':  ['56px', { lineHeight: '60px',  letterSpacing: '-0.030em' }],
+      '7xl':  ['68px', { lineHeight: '72px',  letterSpacing: '-0.032em' }],
     },
     extend: {
       // ── Font family — Inter Variable
@@ -76,10 +82,14 @@ const config: Config = {
         },
 
         // ── Text (semantic — distinct from Tailwind's gray-900 etc)
+        //    tertiary must clear WCAG AA 4.5:1 on BOTH white cards and the
+        //    warm page background (#f4f7f5), because it carries body-size
+        //    supporting copy, metadata, and microcopy all over the product.
+        //    #55665a → 6.11:1 on white / 5.67:1 on page / 5.41:1 on muted.
         text: {
           primary:   '#0d1f14',
-          secondary: '#3d5045',
-          tertiary:  '#6b7d6e',
+          secondary: '#3d5045',   // 8.64:1 on white
+          tertiary:  '#55665a',   // 6.11:1 on white — was #6b7d6e (4.39:1, failed AA)
           inverse:   '#ffffff',
           link:      '#1a4d2e',
           disabled:  '#a8b3aa',
@@ -126,6 +136,14 @@ const config: Config = {
       boxShadow: {
         'subtle': '0 1px 2px rgba(13, 31, 20, 0.04)',
         'hover':  '0 4px 12px rgba(26, 77, 46, 0.08)',
+        // `shadow-elevated` is referenced by 15 components (every product
+        // mockup frame among them) but was never defined here, so those
+        // cards have been rendering with no shadow at all. Defined now.
+        'elevated': '0 8px 24px rgba(13, 31, 20, 0.08)',
+        // Deeper step for the hero product shot and hover states.
+        'lift':     '0 16px 44px rgba(13, 31, 20, 0.13)',
+        // Brand-tinted halo under primary CTAs on dark and light bands.
+        'glow':     '0 10px 34px rgba(26, 77, 46, 0.28)',
         'modal':  '0 16px 48px rgba(13, 31, 20, 0.12)',
       },
 
