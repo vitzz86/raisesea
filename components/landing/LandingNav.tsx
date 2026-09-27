@@ -56,7 +56,7 @@ export function LandingNav({ signedIn }: { signedIn: boolean }) {
           href="/"
           className="inline-flex min-h-[44px] items-center rounded-input"
         >
-          <RaiseSEALogo variant="primary" height={32} />
+          <RaiseSEALogo variant="onDark" height={26} band />
         </Link>
 
         {/* Desktop links */}

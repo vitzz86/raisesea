@@ -849,7 +849,7 @@ export function SiteFooter() {
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Link href="/" className="inline-flex min-h-[44px] items-center rounded-input">
-              <RaiseSEALogo variant="primary" height={34} />
+              <RaiseSEALogo variant="onDark" height={30} band />
             </Link>
             <p className="text-sm text-text-tertiary mt-3 leading-relaxed max-w-xs">
               Fundraising intelligence and execution for founders across Asia Pacific.
