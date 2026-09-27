@@ -1,35 +1,55 @@
 -- ═══════════════════════════════════════════════════════════════
 -- v25_anon_lockdown.sql
--- P0 security fixes — close two anonymous (public anon-key) exposures.
+-- P0 anonymous-access lockdown: table exposure + SECURITY DEFINER
+-- function exposure.
 --
--- FINDING 1 — public.investors had RLS DISABLED.
---   No ENABLE ROW LEVEL SECURITY statement ever ran on this table (v2..v24
---   contain none for it), so the table was served in full to the `anon`
---   role. Measured: an unauthenticated request returned all 742 rows with
---   `email` populated on 742/742 and `linkedin` on 742/742.
+-- This file consolidates two overlapping bodies of work: the table fix found
+-- by a live audit of production, and the function-privilege fix already
+-- written — but never merged — on the fix/security-hardening branch as
+-- supabase/migrations/v23_security_hardening.sql. That branch could not merge
+-- as-is: it numbered itself v23, which now collides with
+-- v23_hermes_news_intelligence.sql on main. It also never mentioned
+-- `investors` at all. One file, next free number, both fixes.
 --
---   The anon key is the publishable key (sb_publishable_…) and is shipped
---   in the public browser bundle, so this was harvestable by anyone.
---   This was unintended: the only in-app reader — app/api/submit/route.ts —
---   selects an explicit column list that EXCLUDES `email`.
+-- ── FINDING 1 — public.investors had RLS DISABLED ───────────────
+--   No ENABLE ROW LEVEL SECURITY statement for this table exists in any
+--   migration, and the table was served in full to the `anon` role. Measured:
+--   an unauthenticated request returned all 742 rows with `email` populated on
+--   742/742 and `linkedin` on 742/742.
 --
--- FINDING 2 — public.get_platform_stats() was EXECUTABLE BY anon.
---   An unauthenticated POST returned total_submissions, total_users,
---   complete/failed analysis counts and total_raise_target_usd ($610M).
+--   The anon key is the publishable key and ships in the public browser
+--   bundle, so this was harvestable by anyone. Unintended: the only in-app
+--   reader — app/api/submit/route.ts — selects an explicit column list that
+--   EXCLUDES email.
 --
--- SAFETY ANALYSIS (verified before writing this file):
---   • investors — the only reader is app/api/submit/route.ts, which builds
---     its client from SUPABASE_SERVICE_KEY (service role). No client-side
---     or anon-key path reads this table, so enabling RLS is safe.
---   • get_platform_stats() — the only caller is app/admin/page.tsx via
---     supabaseAdmin (service role). Revoking from PUBLIC is safe.
---   • The service role (secret key) carries BYPASSRLS, so server-side code
---     is unaffected by enabling RLS here.
---   • This migration does NOT alter any table's columns, so the ops-side
---     Master DB sync for `investors` is unaffected (it is service-role too).
+-- ── FINDING 2 — seven SECURITY DEFINER functions EXECUTABLE BY anon ──
+--   PostgreSQL grants EXECUTE on new functions to PUBLIC by default. Each of
+--   these runs as its definer and therefore BYPASSES RLS, so an unauthenticated
+--   caller could invoke them through PostgREST. Measured: an anonymous call to
+--   get_platform_stats() returned total_users, total_submissions,
+--   failed_analyses and total_raise_target_usd (~$610M).
+--
+--   CALLER AUDIT — every path verified, not assumed. All seven are
+--   service-role only, and NO row-level policy or trigger references any of
+--   them, so revoking from `authenticated` as well as `anon` is safe:
+--     get_platform_stats          app/admin/page.tsx          supabaseAdmin
+--     set_oauth_token             lib/token-storage.ts        supabaseAdmin
+--     get_oauth_token             lib/token-storage.ts        supabaseAdmin
+--     claim_submissions_by_email  app/auth/callback/route.ts  supabaseAdmin
+--     is_super_admin              not called via RPC from the app at all
+--     count_pending_experts       not called via RPC from the app at all
+--     ensure_oauth_key            called internally by the two oauth functions
+--
+-- ── SAFETY ─────────────────────────────────────────────────────
+--   • The service role (secret key) carries BYPASSRLS, so server code is
+--     unaffected by enabling RLS and keeps EXECUTE via the explicit GRANTs.
+--   • No column or table shape changes, so the ops-side Master DB sync for
+--     `investors` (also service-role) is unaffected.
+--   • `submissions` is handled separately, in v26_submissions_anon_lockdown.sql
+--     together with its app-side change.
 --
 -- IDEMPOTENT — safe to re-run.
--- RUN ORDER: this file only. No dependencies on other migrations.
+-- RUN ORDER: this file only. No dependency on v26 or any other migration.
 -- ═══════════════════════════════════════════════════════════════
 
 -- ── 1. investors — enable RLS and lock to the service role ──────────────
@@ -50,21 +70,53 @@ CREATE POLICY "Service role full access"
 
 -- No policy is created for anon or authenticated on purpose.
 -- If a future feature needs read access for logged-in users, add an explicit
--- policy with a column-restricted view — never expose `email`/`linkedin`.
+-- policy over a column-restricted view — never expose email / linkedin.
 
 COMMENT ON TABLE public.investors IS
   'Investor directory. RLS ENABLED (v25) — service role only. Contains email and linkedin; must never be exposed via the anon key.';
 
--- ── 2. get_platform_stats() — remove public execution ───────────────────
--- Revoked from PUBLIC (covers anon + authenticated), re-granted to service_role.
--- If this errors with "function does not exist", confirm the signature with
---   SELECT proname, pg_get_function_identity_arguments(oid)
---     FROM pg_proc WHERE proname = 'get_platform_stats';
--- and adjust the argument list below to match.
-REVOKE EXECUTE ON FUNCTION public.get_platform_stats() FROM PUBLIC;
-GRANT  EXECUTE ON FUNCTION public.get_platform_stats() TO service_role;
+-- ── 2. SECURITY DEFINER functions — revoke public execution ─────────────
+-- Resolved through pg_proc by NAME rather than by hardcoded signatures, so a
+-- statement cannot fail on an argument-type mismatch, and a function that does
+-- not exist in this environment is skipped with a NOTICE instead of aborting
+-- the whole migration part-way through.
+DO $$
+DECLARE
+  targets text[] := ARRAY[
+    'claim_submissions_by_email',
+    'is_super_admin',
+    'get_platform_stats',
+    'count_pending_experts',
+    'ensure_oauth_key',
+    'set_oauth_token',
+    'get_oauth_token'
+  ];
+  rec record;
+BEGIN
+  FOR rec IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = ANY(targets)
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', rec.sig);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', rec.sig);
+    RAISE NOTICE 'v25: locked down %', rec.sig;
+  END LOOP;
+END $$;
 
--- ── Verification (run after applying; both must return 0) ───────────────
---   SELECT count(*) FROM public.investors;        -- as anon  -> 0
---   SELECT public.get_platform_stats();            -- as anon  -> permission denied
---   SELECT count(*) FROM public.investors;        -- as service_role -> 742
+-- ── 3. Stop the next function leaking the same way ─────────────────────
+-- The default PUBLIC grant is the underlying cause of FINDING 2, so change the
+-- default for functions created in this schema from here on.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
+-- ── Verification (run after applying) ──────────────────────────────────
+--   as anon:          SELECT count(*) FROM public.investors;  -> 0 / permission denied
+--   as service_role:  SELECT count(*) FROM public.investors;  -> 742
+--   as anon:          SELECT public.get_platform_stats();     -> permission denied
+--   /admin still renders its stats (that path uses the service role).
+--   Confirm the grants took:
+--   SELECT proname, proacl FROM pg_proc WHERE proname = ANY(ARRAY[
+--     'get_platform_stats','is_super_admin','set_oauth_token','get_oauth_token',
+--     'claim_submissions_by_email','count_pending_experts','ensure_oauth_key']);
