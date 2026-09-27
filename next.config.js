@@ -14,5 +14,17 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+
+  async redirects() {
+    return [
+      // /unpad was a deprecated incubator workspace and has been removed.
+      // Redirect rather than 404 so any bookmarked, shared or externally
+      // linked URL still lands somewhere useful.
+      // NOTE: lib/incubator-progress.ts is NOT dead code — /api/submit
+      // imports it — so only the route was removed here.
+      { source: '/unpad', destination: '/', permanent: true },
+      { source: '/unpad/:path*', destination: '/', permanent: true },
+    ]
+  },
 }
 module.exports = nextConfig
