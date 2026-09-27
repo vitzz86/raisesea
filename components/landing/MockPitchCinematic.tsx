@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import {
-  Mic, MessageSquare, CheckCircle2, Sparkles, Target, Play, Clock
+  Mic, MessageSquare, CheckCircle2, Sparkles, Target, Play, Pause, Clock
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
@@ -34,8 +34,11 @@ type PhaseKey = (typeof PHASES)[number]['key']
 export function MockPitchCinematic() {
   const [phaseIdx, setPhaseIdx] = useState(0)
   const [reducedMotion, setReducedMotion] = useState(false)
-  const [paused, setPaused] = useState(false)
+  const [tabHidden, setTabHidden] = useState(false)
+  const [userPaused, setUserPaused] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const paused = tabHidden || userPaused
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -46,7 +49,7 @@ export function MockPitchCinematic() {
 
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const onVisibility = () => setPaused(document.hidden)
+    const onVisibility = () => setTabHidden(document.hidden)
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [])
@@ -69,22 +72,43 @@ export function MockPitchCinematic() {
         <span className="w-2 h-2 rounded-full bg-border-strong" />
         <span className="w-2 h-2 rounded-full bg-border-strong" />
         <span className="w-2 h-2 rounded-full bg-border-strong" />
-        <span className="ml-3 text-[11px] text-text-tertiary font-medium truncate">
+        <span className="ml-3 hidden min-w-0 text-xs text-text-tertiary font-medium truncate sm:inline">
           Mock Pitch · {PHASES[phaseIdx].label}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1 shrink-0">
+          {/* 44px-tall tap targets (visual bar stays small) — see HeroCinematic. */}
           {PHASES.map((p, i) => (
             <button
               key={p.key}
               type="button"
               onClick={() => setPhaseIdx(i)}
-              aria-label={`Jump to ${p.label}`}
-              className={cn(
-                'h-1 rounded-full transition-all duration-500',
-                i === phaseIdx ? 'w-5 bg-brand' : 'w-1.5 bg-border-strong hover:bg-text-tertiary'
-              )}
-            />
+              aria-label={`Show the ${p.label} step`}
+              aria-current={i === phaseIdx ? 'step' : undefined}
+              className="group/step -my-3 flex h-11 w-11 items-center justify-center"
+            >
+              <span
+                className={cn(
+                  'h-1 rounded-full transition-all duration-500',
+                  i === phaseIdx
+                    ? 'w-5 bg-brand'
+                    : 'w-3 bg-border-strong group-hover/step:bg-text-tertiary'
+                )}
+              />
+            </button>
           ))}
+
+          {!reducedMotion && (
+            <button
+              type="button"
+              onClick={() => setUserPaused(v => !v)}
+              aria-label={userPaused ? 'Play the pitch walkthrough' : 'Pause the pitch walkthrough'}
+              className="ml-1 -my-3 flex h-11 w-11 items-center justify-center rounded-input text-text-secondary hover:text-text-primary"
+            >
+              {userPaused
+                ? <Play className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />
+                : <Pause className="w-3.5 h-3.5" strokeWidth={2} aria-hidden="true" />}
+            </button>
+          )}
         </div>
       </div>
 

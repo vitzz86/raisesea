@@ -26,7 +26,7 @@
   /* Text */
   --text-primary:    #0d1f14;
   --text-secondary:  #3d5045;
-  --text-tertiary:   #6b7d6e;
+  --text-tertiary:   #55665a;   /* 6.11:1 on white — WCAG AA for normal text */
   --text-disabled:   #a8b3aa;
 
   /* Borders */
@@ -126,6 +126,58 @@ html, body {
   border-radius: 4px;
 }
 
+/* Anchor targets must clear the sticky header.
+   WCAG 2.2 SC 2.4.11 (Focus Not Obscured) — without this, jumping to
+   #features or tabbing to an element under the nav hides the focus ring
+   behind the sticky bar. Also keeps in-page anchor links landing on the
+   section heading rather than underneath the nav. */
+html {
+  scroll-padding-top: 5.5rem;
+}
+
+/* ─── Skip link — keyboard users bypass the nav ─────────────────── */
+/* Visually hidden until focused, then a real, high-contrast control. */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 0.75rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  background: var(--brand);
+  color: #ffffff;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-input);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: transform 150ms ease-out;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ─── Reduced motion — global safety net ────────────────────────── */
+/* Components already opt out individually (ScrollReveal, both
+   cinematics), but this guarantees no keyframe animation or transition
+   slips through for users who have explicitly asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Tabular numerals — financial data alignment ───────────────── */
+/* Amounts, dilution %, and scores must align in columns. Inter ships
+   proportional figures by default, which makes "$1.5M" and "$250K"
+   render at different widths. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Remove default focus on buttons that have custom focus styles */
 button:focus:not(:focus-visible),
 a:focus:not(:focus-visible) {
@@ -184,4 +236,89 @@ input:focus, textarea:focus, select:focus {
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Marketing surface — premium treatments
+   Only used by the public landing page and legal pages. Kept in raw
+   CSS because they are layered compositions (gradient + mask + blend)
+   that would be unreadable as long utility strings.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Fine grid, fading out downward. Sits behind hero content as texture.
+   Kept deliberately above pure-perception threshold: at 0.055 alpha the
+   lines read as smudge rather than as a grid on lower-quality displays. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(26, 77, 46, 0.085) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(26, 77, 46, 0.085) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(85% 75% at 50% 0%, #000 0%, transparent 82%);
+  mask-image: radial-gradient(85% 75% at 50% 0%, #000 0%, transparent 82%);
+}
+
+/* Soft brand light source behind the hero. Two stops so it reads as
+   illumination rather than a flat tint. */
+.bg-hero-glow {
+  background:
+    radial-gradient(48% 42% at 50% 0%,   rgba(45, 122, 78, 0.16) 0%, rgba(244, 247, 245, 0) 72%),
+    radial-gradient(30% 30% at 82% 12%,  rgba(26, 77, 46, 0.10) 0%, rgba(244, 247, 245, 0) 70%);
+}
+
+/* Dark bands (positioning + final CTA). A real gradient, plus a subtle
+   top highlight so the edge does not look cut out of the page. */
+.bg-brand-deep {
+  background:
+    radial-gradient(70% 60% at 20% 0%, rgba(45, 122, 78, 0.38) 0%, rgba(13, 42, 24, 0) 62%),
+    linear-gradient(160deg, #0d2a18 0%, #143d24 55%, #0d2a18 100%);
+}
+.bg-brand-deep .bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+/* Cards: a barely-there vertical sheen rather than flat white, so stacked
+   cards read as surfaces with light on them instead of paper cut-outs.
+   The solid background-color is explicit and deliberate: the gradient is
+   opaque, but relying on background-image alone leaves backgroundColor
+   transparent, which both invites bleed-through from a parent and makes
+   automated contrast audits resolve the wrong backdrop. */
+.surface-sheen {
+  background-color: #ffffff;
+  background-image: linear-gradient(180deg, #ffffff 0%, #f8fbf9 100%);
+}
+
+/* One-pixel gradient border, used to frame the hero product shot. */
+.ring-gradient {
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(150deg, rgba(26, 77, 46, 0.45), rgba(26, 77, 46, 0.06) 45%, rgba(212, 223, 215, 0.9)) border-box;
+  border: 1px solid transparent;
+}
+
+/* Headline gradient — deliberately dark-to-dark. A light or multi-hue
+   gradient here would fail contrast on the page background. */
+.text-gradient-brand {
+  background-image: linear-gradient(160deg, #0d1f14 0%, #1a4d2e 70%, #2d7a4e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Hairline divider that fades at both ends — quieter than a solid border. */
+.divider-fade {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(212, 223, 215, 0.9) 22%, rgba(212, 223, 215, 0.9) 78%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-hover {
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease-out;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(13, 31, 20, 0.10);
+    border-color: #c3d3c8;
+  }
 }
